@@ -1,0 +1,4 @@
+# Preserve your existing CUDA-enabled torch build. Install the appropriate torch
+# wheel for your GPU only if torch is absent; this file never selects a CUDA wheel.
+-r requirements.txt
+torch>=2.5,<3

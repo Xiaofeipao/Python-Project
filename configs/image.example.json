@@ -1,0 +1,16 @@
+{
+  "data_type": "image",
+  "train_csv": "../data/image_train.csv",
+  "target_column": "label",
+  "image_column": "image_path",
+  "image_root": "../data/images",
+  "metric": "accuracy",
+  "compute_profile": "auto",
+  "neural_batch_size": 256,
+  "mixed_precision": true,
+  "max_trials": 16,
+  "time_budget_seconds": 1800,
+  "trial_timeout_seconds": 300,
+  "threads": 1,
+  "seed": 42
+}

@@ -1,0 +1,12 @@
+{
+  "evaluation_stage": "released",
+  "evaluation_id": "REPLACE_WITH_SHARED_RELEASED_TASK_ID",
+  "frozen_manifest": "../releases/final/frozen_manifest.json",
+  "data_type": "tabular",
+  "train_csv": "../data/released/train.csv",
+  "validation_csv": "../data/released/validation.csv",
+  "test_csv": "../data/released/test.csv",
+  "target_column": "label",
+  "id_column": "id",
+  "metric": "f1_macro"
+}

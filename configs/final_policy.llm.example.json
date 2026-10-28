@@ -1,0 +1,17 @@
+{
+  "max_trials": 16,
+  "time_budget_seconds": 1800,
+  "trial_timeout_seconds": 300,
+  "threads": 2,
+  "compute_profile": "auto",
+  "device": "auto",
+  "llm_mode": "required",
+  "llm_registry": "model_registry.json",
+  "llm_model_id": "REPLACE_WITH_REVIEWED_PINNED_QWEN_OR_DEEPSEEK_ID",
+  "llm_base_url": "https://provider.example/v1",
+  "llm_api_key_env": "HKUST_API_KEY",
+  "llm_agent_id": "planner",
+  "llm_max_output_tokens": 512,
+  "llm_timeout_seconds": 60,
+  "llm_budget_rmb": "20"
+}

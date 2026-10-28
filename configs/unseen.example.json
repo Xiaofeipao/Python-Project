@@ -1,0 +1,12 @@
+{
+  "evaluation_stage": "unseen",
+  "evaluation_id": "REPLACE_WITH_SHARED_UNSEEN_TASK_ID",
+  "frozen_manifest": "../releases/final/frozen_manifest.json",
+  "unseen_released_at": "REPLACE_WITH_OFFICIAL_ISO_TIMESTAMP_WITH_TIMEZONE",
+  "data_type": "tabular",
+  "train_csv": "../data/unseen/train.csv",
+  "test_csv": "../data/unseen/test.csv",
+  "target_column": "label",
+  "id_column": "id",
+  "metric": "f1_macro"
+}

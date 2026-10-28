@@ -1,0 +1,18 @@
+{
+  "max_trials": 16,
+  "time_budget_seconds": 1800,
+  "trial_timeout_seconds": 300,
+  "final_fit_reserve_fraction": 0.3,
+  "validation_fraction": 0.2,
+  "threads": 2,
+  "seed": 42,
+  "enable_torch": true,
+  "device": "auto",
+  "compute_profile": "auto",
+  "neural_batch_size": 256,
+  "mixed_precision": true,
+  "gpu_cache_fraction": 0.2,
+  "cache_preprocessing": true,
+  "llm_mode": "disabled",
+  "llm_budget_rmb": "20"
+}

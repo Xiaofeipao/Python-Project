@@ -1,0 +1,13 @@
+{
+  "data_type": "text",
+  "train_csv": "../data/text_train.csv",
+  "target_column": "label",
+  "text_columns": ["text"],
+  "metric": "f1_macro",
+  "compute_profile": "auto",
+  "max_trials": 16,
+  "time_budget_seconds": 1800,
+  "trial_timeout_seconds": 300,
+  "threads": 1,
+  "seed": 42
+}
