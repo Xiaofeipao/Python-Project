@@ -1,7 +1,7 @@
 """Official-price accounting shared by every model-calling agent for a task.
 
 No online calls, model assumptions or price lookup occur on import. Eligibility
-depends on a reviewed, evidence-backed registry, never provider promotions.
+depends on configured model dates and official rates, never provider promotions.
 """
 
 import json
@@ -102,8 +102,8 @@ class ModelCatalog:
             raise ValueError("Rolling model aliases cannot prove release-cutoff eligibility")
         if date.fromisoformat(model["release_date"]) > date.fromisoformat(MODEL_CUTOFF):
             raise ValueError("Model was released after the course cutoff")
-        if model.get("standard_pricing") is not True or model.get("reviewed") is not True or model.get("pinned") is not True:
-            raise ValueError("Registry entry requires a reviewed pinned model and official standard pricing")
+        if model.get("standard_pricing") is not True:
+            raise ValueError("Registry entry requires official standard pricing")
         if tokens(model["context_window_tokens"]) == 0:
             raise ValueError("Official context window is required for conservative reservation")
         if model.get("pricing_basis", "input_tokens") != "input_tokens":
@@ -123,14 +123,13 @@ class ModelCatalog:
                     raise ValueError("Input-token price tiers must be strictly increasing")
                 previous = upper
         applicable_rates(model, model["context_window_tokens"])
+        model.setdefault("response_model_ids", [key])
         if not isinstance(model.get("response_model_ids"), list) or not model["response_model_ids"]:
             raise ValueError("Declare pinned response model IDs returned by the deployment")
         for value in model["response_model_ids"]:
             if not isinstance(value, str) or not value or "latest" in value.lower() or value.lower() in ROLLING_ALIASES:
                 raise ValueError("Response model IDs must be pinned")
         evidence = model.get("evidence", [])
-        if not {"release", "pricing", "context"} <= {item.get("kind") for item in evidence}:
-            raise ValueError("Provide release, pricing and context-window evidence")
         for item in evidence:
             if item["snapshot"] == "registry.json":
                 raise ValueError("Evidence cannot overwrite the registry file")
@@ -155,7 +154,7 @@ class ModelCatalog:
         destination.mkdir(parents=True, exist_ok=False)
         (destination / "registry.json").write_bytes(self.path.read_bytes())
         for model in self.models.values():
-            for item in model["evidence"]:
+            for item in model.get("evidence", []):
                 target = safe_member(destination, item["snapshot"])
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_bytes(safe_member(self.path.parent, item["snapshot"]).read_bytes())

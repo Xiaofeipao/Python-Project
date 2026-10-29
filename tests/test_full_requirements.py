@@ -1,4 +1,4 @@
-"""Formal-requirements regressions, prepared on 2026-10-23 and NOT run yet.
+"""Formal-requirements regressions.
 
 All prices/model names below are synthetic unit-test fixtures, never eligible
 production-model entries. HTTP is mocked; these tests must not use a real API.
@@ -49,7 +49,7 @@ class FormalRequirements(unittest.TestCase):
     def test_model_family_release_cutoff_and_evidence(self):
         ModelCatalog(self.registry)
         for changes in ({"family": "Other"}, {"release_date": "2026-10-22"},
-                        {"model_id": "qwen-latest"}, {"reviewed": False}):
+                        {"model_id": "qwen-latest"}, {"standard_pricing": False}):
             self.write_registry(**changes)
             with self.assertRaises(ValueError):
                 ModelCatalog(self.registry)
@@ -57,6 +57,17 @@ class FormalRequirements(unittest.TestCase):
         (self.root / "evidence" / "fixture.txt").write_text("CHANGED", encoding="utf-8")
         with self.assertRaises(ValueError):
             ModelCatalog(self.registry)
+
+    def test_minimal_model_config_needs_no_proof_files_or_review_flags(self):
+        model = dict(self.model)
+        for name in ("evidence", "reviewed", "pinned", "response_model_ids"):
+            model.pop(name)
+        raw = {"schema_version": 1, "currency": "CNY", "pricing_as_of": "2026-10-21", "models": [model]}
+        self.registry.write_text(json.dumps(raw), encoding="utf-8")
+        catalog = ModelCatalog(self.registry)
+        self.assertEqual(catalog.model(model["model_id"])["response_model_ids"], [model["model_id"]])
+        catalog.snapshot(self.root / "minimal_snapshot")
+        ModelCatalog(self.root / "minimal_snapshot" / "registry.json")
 
     def test_unofficial_evidence_domain_is_rejected(self):
         evidence = [{**item, "official_url": "https://untrusted.example/pricing"} for item in self.model["evidence"]]

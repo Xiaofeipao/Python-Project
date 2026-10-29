@@ -2,11 +2,11 @@
 
 根据 `AIAA3102 - Final Project - Full Assignment Requirements.md` 更新的通用分类 SuperAgent，支持表格、文本和图片分类、自主实验、可选 Qwen/DeepSeek 规划、费用记录和版本冻结。
 
-**2026-10-23，当前 0.2.0 版本已通过 26 项单元测试，并在支持 CUDA 的开发环境上完成三种模态各 6 次候选实验。开发留出集准确率：表格 96.49%、合成文本 100%、手写数字图像 100%；均非课程正式成绩。学校 DeepSeek API 已通过独立连通性测试，正式 LLM 规划仍等待固定部署版本和历史官方人民币价格证据，不把未知费用记作零。**
+**2026-10-23，当前 0.2.0 版本已通过 26 项单元测试，并在支持 CUDA 的开发环境上完成三种模态各 6 次候选实验。开发留出集准确率：表格 96.49%、合成文本 100%、手写数字图像 100%；均非课程正式成绩。学校 DeepSeek API 已通过独立连通性测试，正式 LLM 规划仍需填写模型发布日期和标准单价，不把未知费用记作零。**
 
-正式运行流程、模型价格证据格式和冻结操作见 [`docs/full_assignment_workflow.md`](docs/full_assignment_workflow.md)。课程任务的数据格式、划分与指标仍需按每项任务的公告填写。
+正式运行流程、模型计费配置和冻结操作见 [`docs/full_assignment_workflow.md`](docs/full_assignment_workflow.md)。课程任务的数据格式、划分与指标仍需按每项任务的公告填写。
 
-学校 API 接入参数已填入 `configs/final_policy.llm.example.json`：Base URL 为 `https://aigc-api.hkust-gz.edu.cn/api/v2`，请求模型名为 `DeepSeek-V4-Pro`，密钥从 `HKUST_API_KEY` 环境变量读取。本地密钥文件与 API 示例足够完成接入；读取密钥文件和连通性测试的方法见[API 接入说明](docs/full_assignment_workflow.md#学校-api-连通性)。此配置仍是示例：模型目录为空，正式 LLM 规划需先补齐部署版本及历史官方价格证据，不会仅凭模型名自动标记为已核验。
+学校 API 接入参数已填入 `configs/final_policy.llm.example.json`：Base URL 为 `https://aigc-api.hkust-gz.edu.cn/api/v2`，请求模型名为 `DeepSeek-V4-Pro`，密钥从 `HKUST_API_KEY` 环境变量读取。本地密钥文件与 API 示例足够完成接入；读取密钥文件和连通性测试的方法见[API 接入说明](docs/full_assignment_workflow.md#学校-api-连通性)。此配置仍是示例：模型目录为空，正式 LLM 规划需填写模型发布日期和标准单价，无需额外证明附件或审核标记。
 
 ## 环境
 
@@ -48,7 +48,7 @@ python main.py evaluate --model runs/tabular_01/model.joblib --input data/test.c
 - `neural_batch_size` 默认 256；`mixed_precision` 默认 true，在 CUDA 训练时优先使用 BF16，不支持 BF16 时使用 FP16 + GradScaler，CPU 使用 float32。预测使用 float32 张量，CUDA 库仍可能用 TF32 加速卷积，因此不承诺 CPU/GPU 概率逐位一致。核验脚本同时检查分类一致性、快速路径的概率误差和关闭 TF32 后的严格精度误差。
 - `gpu_cache_fraction` 默认 0.2：预计输入大小低于当前空闲显存的这一比例且低于 2 GiB 时，将预处理后的训练数据一次性送入显存；否则逐批搬运。小型稀疏矩阵可在这个界限内转为稠密缓存。`cache_preprocessing` 默认 true，在单次运行内复用训练预处理结果；最终模型移除缓存路径依赖，预测不需要保留缓存。
 - `evaluation_stage` 为 `development`（默认）、`released` 或 `unseen`。后两者要求冻结清单和共享 `evaluation_id`；Unseen 还要求带时区的官方发布时间。`evaluation_id` 只用于账本与日志，不参与候选选择。
-- `llm_mode` 默认 `disabled`，保留无需 LLM 的自主规划；设为 `required` 时必须提供已核验的模型目录、固定模型 ID 和端点。模型仅允许符合日期要求的 Qwen/DeepSeek，单题预算 `llm_budget_rmb` 最大为 `20`；本地部署也按相同标准价格记账。密钥通过 `llm_api_key_env` 指定的环境变量读取。
+- `llm_mode` 默认 `disabled`，保留无需 LLM 的自主规划；设为 `required` 时必须提供模型计费配置、模型 ID 和端点。模型仅允许符合日期要求的 Qwen/DeepSeek，单题预算 `llm_budget_rmb` 最大为 `20`；本地部署也按相同标准价格记账。密钥通过 `llm_api_key_env` 指定的环境变量读取。
 
 ## 自主流程与边界
 
@@ -59,19 +59,19 @@ python main.py evaluate --model runs/tabular_01/model.joblib --input data/test.c
 5. 后续根据外层验证得分调整学习率、轮数和正则化，记录候选理由、得分、失败和用时。失败或超时自动跳过，同一个候选不会重复尝试。最终模型按外层验证指标选择，使用训练和验证数据重新训练；神经网络使用训练内早停选出的轮数（集成则逐成员使用对应轮数），最终重训不再留出内部监控集。失败时自动尝试下一候选。
 6. 最终模型生成后才允许独立预测/评估。评估命令不修改模型、不参与选择。
 
-默认使用**基于规则和实验反馈的自主搜索**；新增可选 Qwen/DeepSeek 规划器，通过兼容 `chat/completions` 的远程 API 或本地服务，在程序生成的候选菜单中自动选择下一项实验。模型不会执行任意生成代码，规划上下文不含任务名称、数据集名称、列名、标签名称或测试成绩。`configs/model_registry.json` 暂为空，避免填入未经核实的模型身份、发布日期和价格；启用 LLM 前必须补齐官方证据并核验服务返回的模型身份和 token 用量。
+默认使用**基于规则和实验反馈的自主搜索**；新增可选 Qwen/DeepSeek 规划器，通过兼容 `chat/completions` 的远程 API 或本地服务，在程序生成的候选菜单中自动选择下一项实验。模型不会执行任意生成代码，规划上下文不含任务名称、数据集名称、列名、标签名称或测试成绩。`configs/model_registry.json` 暂为空，避免填入未经核实的模型身份、发布日期和价格；启用 LLM 前填写日期与标准单价，程序记录返回的模型身份和 token 用量。
 
 CNN 从头训练，不下载预训练权重；大规模图像/语义任务可能仍需扩展方法。当前只支持独立同分布样本的分层划分；时间序列、分组主体或重复样本须提供合适的独立验证集。ID 重叠检查不能识别所有语义或近重复泄漏。
 
 实验和最终训练分别在独立子进程中运行，可按墙钟超时终止。子进程从本次运行的 `source_snapshot/` 启动。父进程的数据读取、哈希、推理和落盘仅在阶段边界检查剩余时间，因此不是操作系统层面的硬时间隔离。线程数通过环境变量和模型参数设置；神经网络记录训练设备、损失和 PyTorch 峰值已分配显存，并将权重保存为 CPU NumPy 数组。CPU 时间、进程峰值内存、系统总显存尚未计量。
 
-正式版新增共享 LLM 账本：按 2026-10-21 官方标准输入/输出价格和服务端实际 token 用量计费，忽略折扣；调用前按完整上下文规模预留最坏费用，推理输出同样纳入预留。预算不够则不发请求，转用规则规划；调用后缺少用量、超时或账本未核清时保留预留并停止，不把未知用量当作零。该保守预留可能拒绝实际很便宜的请求。目录和证据需要组员核验；软件校验来源域名、日期、快照哈希和金额结构，不会自动证明历史价格内容真实。
+正式版新增共享 LLM 账本：按 2026-10-21 官方标准输入/输出价格和服务端实际 token 用量计费，忽略折扣；调用前按完整上下文规模预留最坏费用，推理输出同样纳入预留。预算不够则不发请求，转用规则规划；调用后缺少用量、超时或账本未核清时保留预留并停止，不把未知用量当作零。该保守预留可能拒绝实际很便宜的请求。日期与标准单价需如实填写；不强制准备证明附件、链接、哈希或审核标记。
 
 若训练配置显式指定 `device: "cuda"`，部署到 CPU 时需先在 Python 中加载模型并将 `model.named_steps["classifier"].set_params(device="cpu")`；使用 `device: "auto"` 的模型可自动选择设备。训练内早停、AMP 和固定随机种子不等于所有硬件和 CUDA 版本上位级一致。
 
 输出包括：`model.joblib`、`manifest.json`、`profile.json`、`environment.json`、`source_snapshot/`、`events.jsonl`、`trials.jsonl`、`summary.json` 及每次实验的配置/结果/标准错误。启用缓存时另有 `preprocessing_cache/`，其中包含拟合数据的中间结果；可以在训练完成后自行清理，但请保留复现实验所需的原始数据和记录。manifest 记录数据和源码哈希，source_snapshot 保留同次运行的程序。只有最终模型成功保存后，summary 才记录 `completed`。
 
-新增 `model_usage.json`（单任务所有 agent 的费用汇总）、`task_model_calls.json`（共享账本快照），启用 LLM 后还有 `model_calls.jsonl`、请求/响应文件及 `model_policy/` 的价格证据副本。正式 released/unseen 运行若配置了 `test_csv`，会在自动选型和重训完成后直接生成 `predictions.csv`，无需人工选择模型或另发预测指令。失败时保留候选日志；已完成但未完成输出的模型标为 `partial_model.joblib`，账目未核清的模型标为 `unverified_model.joblib`。
+新增 `model_usage.json`（单任务所有 agent 的费用汇总）、`task_model_calls.json`（共享账本快照），启用 LLM 后还有 `model_calls.jsonl`、请求/响应文件及 `model_policy/` 的模型计费配置副本。正式 released/unseen 运行若配置了 `test_csv`，会在自动选型和重训完成后直接生成 `predictions.csv`，无需人工选择模型或另发预测指令。失败时保留候选日志；已完成但未完成输出的模型标为 `partial_model.joblib`，账目未核清的模型标为 `unverified_model.joblib`。
 
 `predict` 输出 ID（若配置）和 `prediction`；支持概率的模型另输出 `probability_0` 等列，类别顺序见输出旁的 `.metadata.json`。`evaluate` 输出所选指标和 classification_report，并拒绝与训练/验证 CSV 内容哈希相同的文件。预测和评估输出必须是新文件。预测其他位置的图片清单时可以用 `--image-root` 重定位图片根目录。请从项目根目录运行，并保留 `superagent/`，因为序列化模型依赖其中的自定义预处理类。
 

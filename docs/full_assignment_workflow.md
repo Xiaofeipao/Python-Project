@@ -2,7 +2,7 @@
 
 依据：`AIAA3102 - Final Project - Full Assignment Requirements.md`。
 
-**状态：2026-10-23 后续获得运行授权，当前版本已通过 26 项单元测试与三模态 GPU 开发试跑。生产模型目录仍为空；学校 API 连通性成功不代表部署固定版本和历史官方价格已完成核验。本文正式提交路径是操作示例，不是已经提交给课程的产物。**
+**状态：2026-10-23 后续获得运行授权，当前版本已通过 26 项单元测试与三模态 GPU 开发试跑。生产模型目录仍为空；启用 LLM 需填写模型发布日期与标准单价。本文正式提交路径是操作示例，不是已经提交给课程的产物。**
 
 ## 1. 本次落实的规则
 
@@ -15,29 +15,21 @@
 
 评分已改为：Released Tasks 性能 20%、Unseen Task 性能 10%、自主系统设计 30%、执行与可复现报告 10%、展示 30%。小组为 2–4 人。
 
-## 2. 先核验模型、价格及服务接口
+## 2. API 与模型计费配置
 
-`configs/model_registry.json` 故意保留空 `models` 列表。没有填入未经核实的模型名称、发布日期或人民币价格。默认 `llm_mode: "disabled"` 使用已有规则和验证反馈自主规划，无 LLM 请求；其用量仍需与共享任务账本一起记录。
+默认使用规则规划器，无需 API。启用 LLM 时使用 `configs/final_policy.llm.example.json`，在 `configs/model_registry.json` 填写计费和程序运行需要的信息：
 
-启用 LLM 时使用 `configs/final_policy.llm.example.json` 作为政策模板，补齐端点和模型 ID。接口需要兼容 `/chat/completions`，非流式响应提供：
+- `model_id`、`family`：请求模型名及 Qwen / DeepSeek 家族。
+- `release_date`：实际发布日期，不得晚于 2026-10-21。
+- `standard_pricing: true`：采用官方标准价格。
+- `input_rmb_per_million`、`output_rmb_per_million`：截至 2026-10-21 的标准人民币单价；分档价格使用 `pricing_tiers`。
+- `context_window_tokens`：调用前预算预留使用的上下文上限，是程序参数，不是作业证明材料。
 
-- `model`：目录中声明的固定模型身份，不能只给滚动的 latest / deepseek-chat / deepseek-reasoner 别名。
-- `usage.prompt_tokens` 和 `usage.completion_tokens`：真实整数，包含缓存输入和全部推理输出的消耗；不是估计值。存在 `total_tokens` 时必须等于两者之和。
-- `choices[0].message.content`：候选菜单的 JSON 选择结果。格式不合法但用量已核清时，记录费用并自动使用规则候选；不重试该次请求。
+顶层保留 `schema_version: 1`、`currency: "CNY"`、`pricing_as_of: "2026-10-21"` 和 `models` 列表。当前目录为空，不会编造日期或将未知价格填成零。
 
-目录中每个模型条目应包含这些字段，值必须来自组员核验的真实资料：
+**无需填写 `reviewed`、`pinned`，无需提交证明文件、链接、截图或 SHA-256。** `response_model_ids` 可省略，默认响应模型名与请求名相同；平台返回其他名称时再配置。旧配置中可选的 `evidence` 如已提供，仍会检查其完整性，但不用为运行专门准备。
 
-- `model_id`：固定 Qwen/DeepSeek 模型 ID；`family` 为 `Qwen` 或 `DeepSeek`。
-- `release_date`：官方发布日期，ISO 日期；`context_window_tokens`：官方上下文上限。
-- `reviewed: true`、`pinned: true`、`standard_pricing: true`：完成固定版本与官方标准价格核验后才能设置；不能用 qwen-plus 等滚动别名代替具体快照。
-- `input_rmb_per_million` / `output_rmb_per_million`：官方标准人民币每百万 token 价格，建议用十进制字符串。此实现不自动换汇；不要用供应商优惠价格代替官方标准价。
-- 若价格按输入长度分档，改用 `pricing_tiers`：每档包含 `input_tokens_up_to`、`input_rmb_per_million`、`output_rmb_per_million`。阈值必须取官方值，严格递增，最后一档可用 `null`。按完整实际输入长度选择档位，不能先扣除缓存输入。当前不支持按其他条件定价的计费规则。
-- `response_model_ids`：这个部署实际返回、且可证明对应固定版本的模型身份列表。
-- `evidence`：至少包含 `release`、`pricing`、`context` 三种证据。每项提供 `kind`、`official_url`、`snapshot`、`sha256`。快照放在目录文件所在文件夹内；路径相对目录文件，不能越出该文件夹。
-
-证据 URL 要求 HTTPS，并限制在相应发布方的官方域名/组织，例如 Qwen 的官方站点、阿里云文档、Qwen 的 GitHub/Hugging Face 组织；DeepSeek 对应其官方域名和组织。程序验证结构、来源域名、日期和证据文件哈希，**不自动上网证明内容或历史价格真实**。组员需要确认快照确实支持截至 2026-10-21 的发布日期、价格、上下文和模型身份，保留可供课程抽查的原始来源。
-
-本地部署同样要返回真实 usage 和固定模型身份。当前通过 HTTP 接入本地服务，不内置 Qwen/DeepSeek 下载或推理服务。远程接口要求 HTTPS；HTTP 只允许本机回环地址。密钥只能通过环境变量读取，不会写入配置、请求体或费用日志。
+服务端需返回真实输入、输出 token 用量，推理输出也计入费用。程序保留每次调用与费用记录，单题预算不超过人民币 20 元。远程使用 HTTPS，密钥从环境变量读取。
 
 ## 3. 共享账本和保守预算
 
@@ -67,7 +59,7 @@ python main.py freeze --policy configs/final_policy.json --output releases/final
 python releases/final/main.py verify-freeze --manifest releases/final/frozen_manifest.json
 ```
 
-冻结包包含程序、依赖说明、配置/文档/检查源码、完整算法政策，以及启用 LLM 时的模型目录和价格证据。记录每个文件的 SHA-256 及运行代码指纹。此命令不训练模型、不调用 LLM；开发验证生成的冻结副本不等于课程最终提交版本。
+冻结包包含程序、依赖说明、配置/文档/检查源码、完整算法政策，以及启用 LLM 时的模型计费配置。记录每个文件的 SHA-256 及运行代码指纹。此命令不训练模型、不调用 LLM；开发验证生成的冻结副本不等于课程最终提交版本。
 
 正式 `released` / `unseen` 配置必须引用 `frozen_manifest.json`。程序校验包内文件、运行代码和策略；不能在任务配置中覆盖冻结的搜索次数、随机种子、训练参数、LLM 身份、价格目录等。任务可以填写数据路径、模态列、标签列、指标等课程规定的输入信息。不要通过把正式运行标成 development 绕开冻结流程。
 
@@ -93,7 +85,7 @@ Unseen 的训练预算受官方发布时间起 24 小时的剩余时间约束；
 
 ## 6. 日志、报告与提交时点
 
-每项任务保留：`model.joblib` 或明确标识的部分结果、预测文件、源码快照、数据哈希与划分、实验日志、`model_usage.json`、`task_model_calls.json`。启用 LLM 时另有 `model_calls.jsonl`、请求/原始响应、价格目录与证据副本，并保留 `SUPERAGENT_USAGE_ROOT` 的共享账本原件。
+每项任务保留：`model.joblib` 或明确标识的部分结果、预测文件、源码快照、数据哈希与划分、实验日志、`model_usage.json`、`task_model_calls.json`。启用 LLM 时另有 `model_calls.jsonl`、请求/原始响应、模型计费配置副本，并保留 `SUPERAGENT_USAGE_ROOT` 的共享账本原件。
 
 最终提交包含统一程序、依赖和 README、Released Tasks 的模型与结果、`report.pdf`、执行与资源记录、AI 使用声明。报告成绩必须来自同一最终版本的完整自主运行；失败任务说明阶段、原因和有效部分结果。10 月 18 日的历史开发结果不能移作新版本正式成绩。
 
@@ -111,9 +103,9 @@ Final Submission 截止为所在 section **最后一周第一次课前一晚 23:
 - `llm_model_id`：`DeepSeek-V4-Pro`，这是学校接口接受的请求名。
 - `llm_api_key_env`：`HKUST_API_KEY`，HTTP 使用 `Authorization: Bearer ...`。
 
-两个文件未提供学校请求名对应的固定部署版本证明，以及截至 2026-10-21 的官方标准人民币输入/输出价格、上下文上限等证据。需要从平台部署说明及模型发布方官方材料核实这些信息，再填入 `configs/model_registry.json`。学校余额、赠送额度不能替代作业的标准价格核算。当前示例尚不能用于完整的正式 LLM 规划运行：目录为空时会拒绝启动，不会绕过资格或费用校验。
+这两个文件足够完成 API 接入，不需要另填版本证明或价格证据附件。正式计费仍需填写真实发布日期、标准单价和预算预留所用的上下文上限；学校余额或赠送额度不能替代作业的标准价格核算。
 
-学校 API 的聊天补全接口为 `https://aigc-api.hkust-gz.edu.cn/api/v2/chat/completions`，模型名为 `DeepSeek-V4-Pro`。2026-10-23 独立开发探测返回 HTTP 200 / `OK`，实际输入 88、输出 13、总计 101 tokens。响应仍只包含学校模型名，不能据此证明具体固定部署版本；正式目录暂不自动填入。此次调用不进入任何课程题目的运行结果，独立记录中的人民币费用为未知，而非零。
+学校 API 的聊天补全接口为 `https://aigc-api.hkust-gz.edu.cn/api/v2/chat/completions`，模型名为 `DeepSeek-V4-Pro`。2026-10-23 独立开发探测返回 HTTP 200 / `OK`，实际输入 88、输出 13、总计 101 tokens。模型目录中的日期和价格不能仅从响应推断。此次调用不进入任何课程题目的运行结果，独立记录中的人民币费用为未知，而非零。
 
 如代理影响学校内网接口连接，可按所在网络要求为该域名配置 `NO_PROXY`。保持 TLS 证书验证启用；无需更改全局代理。
 
@@ -129,6 +121,6 @@ python scripts/probe_hkust_api.py --output runs/hkust_probe_new
 Remove-Item Env:HKUST_API_KEY
 ```
 
-也可以直接向探测脚本传入 `--key-file $credentialPath`，无需先设置环境变量；完整规划器只读取配置指定的环境变量。不要输出密钥值、把密钥写入 JSON，或将密钥文件提交到 Git。正式运行前还需设置持久的共享 `SUPERAGENT_USAGE_ROOT` 并完成前述目录核验和冻结步骤。
+也可以直接向探测脚本传入 `--key-file $credentialPath`，无需先设置环境变量；完整规划器只读取配置指定的环境变量。不要输出密钥值、把密钥写入 JSON，或将密钥文件提交到 Git。正式运行前还需设置持久的共享 `SUPERAGENT_USAGE_ROOT` 并完成计费配置和冻结步骤。
 
 探测脚本只从环境变量或指定的现有文件读取凭据，不复制密钥；请求和响应摘要分别保存，不记录 Authorization。它仅检查开发连通性，不绕过正式运行的模型目录、预算账本与证据要求。开发探测记录保存在本地 runs/ 目录，不纳入 Git 仓库；未知用量和费用不能假定为零。
