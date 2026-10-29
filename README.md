@@ -2,24 +2,22 @@
 
 根据 `AIAA3102 - Final Project - Full Assignment Requirements.md` 更新的通用分类 SuperAgent，支持表格、文本和图片分类、自主实验、可选 Qwen/DeepSeek 规划、费用记录和版本冻结。
 
-**2026-10-23 经用户授权，当前 0.2.0 版本已通过 26 项单元测试，并在 `torch_py311` / RTX 5060 Ti 上完成三种模态各 6 次候选实验。开发留出集准确率：表格 96.49%、合成文本 100%、手写数字图像 100%；均非课程正式成绩。学校 DeepSeek API 已通过独立连通性测试，正式 LLM 规划仍等待固定部署版本和历史官方人民币价格证据，不把未知费用记作零。**
+**2026-10-23，当前 0.2.0 版本已通过 26 项单元测试，并在支持 CUDA 的开发环境上完成三种模态各 6 次候选实验。开发留出集准确率：表格 96.49%、合成文本 100%、手写数字图像 100%；均非课程正式成绩。学校 DeepSeek API 已通过独立连通性测试，正式 LLM 规划仍等待固定部署版本和历史官方人民币价格证据，不把未知费用记作零。**
 
 正式运行流程、模型价格证据格式和冻结操作见 [`docs/full_assignment_workflow.md`](docs/full_assignment_workflow.md)。课程任务的数据格式、划分与指标仍需按每项任务的公告填写。
 
 ## 环境
 
-要求 Python 3.10+。基础依赖见 `requirements.txt`，可选 PyTorch 依赖见 `requirements-gpu.txt`。2026-10-18 实际检查并运行的环境是 **`torch_py311`**：
+要求 Python 3.10+。基础依赖见 `requirements.txt`，可选 PyTorch 依赖见 `requirements-gpu.txt`。可以使用独立虚拟环境或 Conda 环境，以下命令均在已激活的项目环境中执行。
 
-- Python 3.11.15、NumPy 2.4.6、pandas 3.0.3、scikit-learn 1.9.0、SciPy 1.17.1、joblib 1.5.3、Pillow 11.1.0，均已成功导入。
-- PyTorch 2.12.1+cu132，CUDA 构建版本 13.2，GPU **NVIDIA GeForce RTX 5060 Ti**；已完成 CUDA 矩阵运算和神经网络训练。
-- 现有依赖已经足够，本次未安装或升级任何包。其他 Anaconda 环境仅在初次开发时检查过安装记录。
+CPU 环境可运行传统分类器；GPU 加速需要支持 CUDA 的 NVIDIA 显卡，以及与驱动兼容的 CUDA 版 PyTorch。程序自动检测 CUDA，并在支持时使用混合精度训练。具体依赖版本和设备信息由每次运行的环境日志记录。
 
-建议继续使用这个环境。若换机器，请先检查实际导入，再按需安装。已有 CUDA 版 PyTorch 时不要用普通依赖安装命令替换它。
+先检查依赖导入情况，再按需安装。已有 CUDA 版 PyTorch 时，请保留与设备兼容的安装。
 
 ```powershell
-& 'D:\Anaconda\envs\torch_py311\python.exe' main.py doctor
+python main.py doctor
 # 如果实际导入检查发现缺少依赖，再决定是否执行：
-# & 'D:\Anaconda\envs\torch_py311\python.exe' -m pip install -r requirements.txt
+# python -m pip install -r requirements.txt
 ```
 
 ## 输入和运行
@@ -27,9 +25,9 @@
 每项任务使用一个 JSON 配置，见 `configs/`。数据统一为 CSV：表格数据每列一个特征；文本列存原文；图片列存图片路径。其他数据格式应先按课程规定转换成 CSV 清单，不能根据数据集名称定制模型。配置中的相对路径以配置文件所在目录为基准，CSV 中相对图片路径以 `image_root` 为基准。
 
 ```powershell
-& 'D:\Anaconda\envs\torch_py311\python.exe' main.py train --config configs/tabular.example.json --output runs/tabular_01
-& 'D:\Anaconda\envs\torch_py311\python.exe' main.py predict --model runs/tabular_01/model.joblib --input data/test.csv --output runs/tabular_01/predictions.csv
-& 'D:\Anaconda\envs\torch_py311\python.exe' main.py evaluate --model runs/tabular_01/model.joblib --input data/test.csv --output runs/tabular_01/final_evaluation.json
+python main.py train --config configs/tabular.example.json --output runs/tabular_01
+python main.py predict --model runs/tabular_01/model.joblib --input data/test.csv --output runs/tabular_01/predictions.csv
+python main.py evaluate --model runs/tabular_01/model.joblib --input data/test.csv --output runs/tabular_01/final_evaluation.json
 ```
 
 示例文件仅描述输入格式，没有附带课程数据。`--output` 训练目录必须不存在，避免覆盖实验。训练异常返回非零状态并保留已有日志。
@@ -95,10 +93,10 @@ CNN 从头训练，不下载预训练权重；大规模图像/语义任务可能
 
 ```powershell
 # 输出目录必须不存在；复验时使用新的 --name。
-& 'D:\Anaconda\envs\torch_py311\python.exe' scripts/benchmark.py --phase baseline --name repeat_cpu
-& 'D:\Anaconda\envs\torch_py311\python.exe' scripts/benchmark.py --phase optimized --name repeat_cuda
-# 16 GB GPU 的较高算力配置；每类 12 个候选，单任务最多 20 分钟：
-& 'D:\Anaconda\envs\torch_py311\python.exe' scripts/benchmark.py --phase optimized --compute-profile gpu_large --max-trials 12 --budget 1200 --name repeat_gpu_large
+python scripts/benchmark.py --phase baseline --name repeat_cpu
+python scripts/benchmark.py --phase optimized --name repeat_cuda
+# GPU 较高算力配置示例；每类 12 个候选，单任务最多 20 分钟：
+python scripts/benchmark.py --phase optimized --compute-profile gpu_large --max-trials 12 --budget 1200 --name repeat_gpu_large
 # 核验本版本新生成的运行（timeout_check 目录必须不存在）：
-& 'D:\Anaconda\envs\torch_py311\python.exe' scripts/check_artifacts.py --run repeat_gpu_large
+python scripts/check_artifacts.py --run repeat_gpu_large
 ```

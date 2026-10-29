@@ -45,7 +45,7 @@
 
 ```powershell
 # 正式运行前设置为整个小组共用的持久目录。
-$env:SUPERAGENT_USAGE_ROOT = 'D:\Python Project\.model_usage'
+$env:SUPERAGENT_USAGE_ROOT = (Join-Path (Get-Location) '.model_usage')
 # 如启用远程 LLM，再以安全方式设置 HKUST_API_KEY，勿把密钥写进提交文件。
 ```
 
@@ -63,8 +63,8 @@ HTTP 错误、超时、缺失 usage、无法核对模型身份或异常 token �
 
 ```powershell
 # 以下为正式提交路径示例；开发验证使用单独的 runs/ 目录。
-& 'D:\Anaconda\envs\torch_py311\python.exe' main.py freeze --policy configs/final_policy.json --output releases/final
-& 'D:\Anaconda\envs\torch_py311\python.exe' releases/final/main.py verify-freeze --manifest releases/final/frozen_manifest.json
+python main.py freeze --policy configs/final_policy.json --output releases/final
+python releases/final/main.py verify-freeze --manifest releases/final/frozen_manifest.json
 ```
 
 冻结包包含程序、依赖说明、配置/文档/检查源码、完整算法政策，以及启用 LLM 时的模型目录和价格证据。记录每个文件的 SHA-256 及运行代码指纹。此命令不训练模型、不调用 LLM；开发验证生成的冻结副本不等于课程最终提交版本。
@@ -80,9 +80,9 @@ HTTP 错误、超时、缺失 usage、无法核对模型身份或异常 token �
 课程任务发布后，按官方格式和指标填写 `configs/released.example.json` 或 `configs/unseen.example.json`。示例 ID 和时间戳是占位符，不能直接作为正式任务信息；代码没有自动猜测任何截止日期。
 
 ```powershell
-& 'D:\Anaconda\envs\torch_py311\python.exe' releases/final/main.py train --config configs/released.example.json --output runs/released_task_01
+python releases/final/main.py train --config configs/released.example.json --output runs/released_task_01
 # 两个 section 完成展示、正式发布 Unseen Task 后，先填官方发布时间及数据路径：
-& 'D:\Anaconda\envs\torch_py311\python.exe' releases/final/main.py train --config configs/unseen.example.json --output runs/unseen_task_01
+python releases/final/main.py train --config configs/unseen.example.json --output runs/unseen_task_01
 ```
 
 正式运行若给出 `test_csv`，完成最终自动选型和重训后，会自动生成 `predictions.csv` 和类别顺序说明，不用人为指定最佳模型。测试集不进入训练或规划上下文，程序也不会在搜索期间读取测试分数。测试标签若已公开，最终评估仍是独立 `evaluate` 操作，结果不能再反馈给模型选择。
@@ -105,14 +105,14 @@ Final Submission 截止为所在 section **最后一周第一次课前一晚 23:
 
 ## 学校 API 连通性
 
-本机提供的 `D:\test_api_key.py` 指向 `https://aigc-api.hkust-gz.edu.cn/api/v2/chat/completions`，模型名为 `DeepSeek-V4-Pro`。2026-10-23 独立开发探测返回 HTTP 200 / `OK`，实际输入 88、输出 13、总计 101 tokens。响应仍只包含学校模型名，不能据此证明具体固定部署版本；正式目录暂不自动填入。此次调用不进入任何课程题目的运行结果，独立记录中的人民币费用为未知，而非零。
+学校 API 的聊天补全接口为 `https://aigc-api.hkust-gz.edu.cn/api/v2/chat/completions`，模型名为 `DeepSeek-V4-Pro`。2026-10-23 独立开发探测返回 HTTP 200 / `OK`，实际输入 88、输出 13、总计 101 tokens。响应仍只包含学校模型名，不能据此证明具体固定部署版本；正式目录暂不自动填入。此次调用不进入任何课程题目的运行结果，独立记录中的人民币费用为未知，而非零。
 
-本机系统代理使学校内网接口在 TLS 握手时重置；仅在当前 PowerShell 进程为学校域名设置 `NO_PROXY` 后可正常直连，不需要关闭 TLS 证书验证或更改全局代理。
+如代理影响学校内网接口连接，可按所在网络要求为该域名配置 `NO_PROXY`。保持 TLS 证书验证启用；无需更改全局代理。
 
 ```powershell
 $env:NO_PROXY = 'aigc-api.hkust-gz.edu.cn'
-# HKUST_API_KEY 已设置时不需要 --key-file；输出目录须为新目录。
-& 'D:\Anaconda\envs\torch_py311\python.exe' scripts/probe_hkust_api.py --key-file 'D:\api_key.txt' --output runs/hkust_probe_new
+# 先安全设置 HKUST_API_KEY；输出目录须为新目录。
+python scripts/probe_hkust_api.py --output runs/hkust_probe_new
 ```
 
-探测脚本只从环境变量或指定的现有文件读取凭据，不复制密钥；请求和响应摘要分别保存，不记录 Authorization。它仅检查开发连通性，不绕过正式运行的模型目录、预算账本与证据要求。最初两次连接失败分别保留在 `runs/hkust_connectivity_20261023*`，不假定未知用量为零；成功记录见 `runs/hkust_connectivity_20261023_direct/result.json`。
+探测脚本只从环境变量或指定的现有文件读取凭据，不复制密钥；请求和响应摘要分别保存，不记录 Authorization。它仅检查开发连通性，不绕过正式运行的模型目录、预算账本与证据要求。开发探测记录保存在本地 runs/ 目录，不纳入 Git 仓库；未知用量和费用不能假定为零。
