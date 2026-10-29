@@ -105,14 +105,30 @@ Final Submission 截止为所在 section **最后一周第一次课前一晚 23:
 
 ## 学校 API 连通性
 
+本地密钥文件提供访问凭据，API 接入示例提供 URL、Bearer 认证方式和请求模型名。这两项足够完成接入配置；不需要把原始密钥文件或个人测试脚本复制到仓库。`configs/final_policy.llm.example.json` 已填入确认过的学校参数：
+
+- `llm_base_url`：`https://aigc-api.hkust-gz.edu.cn/api/v2`。规划器会自动追加 `/chat/completions`，不要重复填写该后缀。
+- `llm_model_id`：`DeepSeek-V4-Pro`，这是学校接口接受的请求名。
+- `llm_api_key_env`：`HKUST_API_KEY`，HTTP 使用 `Authorization: Bearer ...`。
+
+两个文件未提供学校请求名对应的固定部署版本证明，以及截至 2026-10-21 的官方标准人民币输入/输出价格、上下文上限等证据。需要从平台部署说明及模型发布方官方材料核实这些信息，再填入 `configs/model_registry.json`。学校余额、赠送额度不能替代作业的标准价格核算。当前示例尚不能用于完整的正式 LLM 规划运行：目录为空时会拒绝启动，不会绕过资格或费用校验。
+
 学校 API 的聊天补全接口为 `https://aigc-api.hkust-gz.edu.cn/api/v2/chat/completions`，模型名为 `DeepSeek-V4-Pro`。2026-10-23 独立开发探测返回 HTTP 200 / `OK`，实际输入 88、输出 13、总计 101 tokens。响应仍只包含学校模型名，不能据此证明具体固定部署版本；正式目录暂不自动填入。此次调用不进入任何课程题目的运行结果，独立记录中的人民币费用为未知，而非零。
 
 如代理影响学校内网接口连接，可按所在网络要求为该域名配置 `NO_PROXY`。保持 TLS 证书验证启用；无需更改全局代理。
 
 ```powershell
-$env:NO_PROXY = 'aigc-api.hkust-gz.edu.cn'
-# 先安全设置 HKUST_API_KEY；输出目录须为新目录。
+# 在项目根目录、已激活的 Python 环境中执行；输入现有密钥文件的路径。
+$credentialPath = Read-Host '本地 API 密钥文件路径'
+$env:HKUST_API_KEY = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $credentialPath).Path).Trim()
+# 仅在网络要求直连学校接口时设置；保留原有其他直连域名。
+$env:NO_PROXY = (@($env:NO_PROXY, 'aigc-api.hkust-gz.edu.cn') | Where-Object { $_ }) -join ','
+# 输出目录须为新目录；测试会真实消耗 token。
 python scripts/probe_hkust_api.py --output runs/hkust_probe_new
+# 完成本次调用后可清除当前会话中的凭据。
+Remove-Item Env:HKUST_API_KEY
 ```
+
+也可以直接向探测脚本传入 `--key-file $credentialPath`，无需先设置环境变量；完整规划器只读取配置指定的环境变量。不要输出密钥值、把密钥写入 JSON，或将密钥文件提交到 Git。正式运行前还需设置持久的共享 `SUPERAGENT_USAGE_ROOT` 并完成前述目录核验和冻结步骤。
 
 探测脚本只从环境变量或指定的现有文件读取凭据，不复制密钥；请求和响应摘要分别保存，不记录 Authorization。它仅检查开发连通性，不绕过正式运行的模型目录、预算账本与证据要求。开发探测记录保存在本地 runs/ 目录，不纳入 Git 仓库；未知用量和费用不能假定为零。

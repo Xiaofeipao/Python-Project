@@ -6,6 +6,8 @@
 
 正式运行流程、模型价格证据格式和冻结操作见 [`docs/full_assignment_workflow.md`](docs/full_assignment_workflow.md)。课程任务的数据格式、划分与指标仍需按每项任务的公告填写。
 
+学校 API 接入参数已填入 `configs/final_policy.llm.example.json`：Base URL 为 `https://aigc-api.hkust-gz.edu.cn/api/v2`，请求模型名为 `DeepSeek-V4-Pro`，密钥从 `HKUST_API_KEY` 环境变量读取。本地密钥文件与 API 示例足够完成接入；读取密钥文件和连通性测试的方法见[API 接入说明](docs/full_assignment_workflow.md#学校-api-连通性)。此配置仍是示例：模型目录为空，正式 LLM 规划需先补齐部署版本及历史官方价格证据，不会仅凭模型名自动标记为已核验。
+
 ## 环境
 
 要求 Python 3.10+。基础依赖见 `requirements.txt`，可选 PyTorch 依赖见 `requirements-gpu.txt`。可以使用独立虚拟环境或 Conda 环境，以下命令均在已激活的项目环境中执行。
@@ -77,7 +79,7 @@ CNN 从头训练，不下载预训练权重；大规模图像/语义任务可能
 
 源码和统一入口已提供；真实数据、模型、结果、执行日志和 `report.pdf` 必须在正式任务发布后由完整自主运行产生。`docs/report_template.md` 是待填写的报告结构，不是实验结果；`AI_USAGE.md` 是需由组员核实的 AI 使用声明。提交前固定最终版本，用同一版本重新完成所有报告实验，保存数据划分、依赖和日志。
 
-检查代码位于 `tests/`。旧版本曾通过 15 项检查；本次另加入 `tests/test_full_requirements.py`，覆盖费用、预算、模型资格、冻结策略、24 小时窗口和模拟 API 记账。**本次所有检查均未执行，不能据旧结果声称当前版本通过。** 后续允许运行时再执行 `python -m unittest discover -s tests -v`。
+检查代码位于 `tests/`。2026-10-23 的代码版本已通过 26 项检查，包含 `tests/test_full_requirements.py` 对费用、预算、模型资格、冻结策略、24 小时窗口和模拟 API 记账的覆盖。后续文档与 API 示例配置更新未重新运行训练或测试；修改算法后应执行 `python -m unittest discover -s tests -v`。
 
 开发基准脚本是 `scripts/benchmark.py`，使用 scikit-learn 自带的乳腺癌表格数据、手写数字图片和合成多语言文本，无需下载。基线阶段只比较验证分数；优化阶段在自主选择完成后另外执行预测和独立留出集评估。数据位于 `data/development/`。`runs/development_baseline/` 保存初始 CPU 基线，`runs/development_optimized/` 保留包含图片预处理拟合状态错误的首轮诊断，`runs/development_final/` 保存修复后固定版本的三类任务模型、预测、评估和日志。训练数据、验证数据和开发留出集按 60% / 20% / 20% 分层划分；它们只是开发用途，不能用于声称课程正式任务性能。
 
