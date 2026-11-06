@@ -14,6 +14,26 @@ from superagent.tabular_models import BalancedExtraTrees, BalancedRandomForest
 
 
 class TabularModelTests(unittest.TestCase):
+    def test_leaf_boost_and_ensembles_handle_missing_and_unseen_categories(self):
+        frame = pd.DataFrame({'number': np.arange(60, dtype=float), 'category': ['a', 'b', None] * 20})
+        y = np.array(['decline', 'accept', 'other'] * 20)
+        profile = {'data_type': 'tabular', 'features': list(frame), 'numeric_columns': ['number'],
+                   'categorical_columns': ['category']}
+        for family in ('lightgbm', 'catboost_ensemble', 'tabular_blend'):
+            candidate = {'family': family, 'iterations': 10, 'depth': 3, 'learning_rate': .1,
+                         'l2_leaf_reg': 3, 'num_leaves': 7, 'min_child_samples': 2, 'reg_lambda': 1}
+            model = build_model(profile, candidate, TaskConfig(train_csv='unused', target_column='label'))
+            model.fit(frame, y)
+            query = pd.DataFrame({'number': [np.nan, 1.], 'category': ['unseen', None]})
+            expected = model.predict_proba(query)
+            np.testing.assert_allclose(expected.sum(axis=1), 1)
+            self.assertEqual(set(model.classes_), set(y))
+            self.assertEqual(model.predict(query).shape, (2,))
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'advanced.joblib'
+                joblib.dump(model, path)
+                np.testing.assert_allclose(joblib.load(path).predict_proba(query), expected)
+
     def test_balanced_string_labels_match_explicit_sample_weights(self):
         X = np.arange(60).reshape(30, 2)
         for labels in (["0"] * 20 + ["1"] * 10, ["a"] * 20 + ["b"] * 10):

@@ -59,6 +59,9 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--metric", default="accuracy")
     parser.add_argument("--skip-test", action="store_true", help="Compare validation only; do not open test arrays")
+    parser.add_argument('--max-trials', type=int, default=16)
+    parser.add_argument('--budget', type=float, default=600)
+    parser.add_argument('--trial-timeout', type=float, default=120)
     args = parser.parse_args()
     source, output = args.input.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -69,7 +72,7 @@ def main():
         report["splits"][split] = convert_split(source, split, data / f"{split}.csv")
     config = {"train_csv": str(data / "train.csv"), "validation_csv": str(data / "val.csv"),
               "target_column": "label", "id_column": "id", "data_type": "tabular", "metric": args.metric,
-              "max_trials": 16, "time_budget_seconds": 600, "trial_timeout_seconds": 120,
+              "max_trials": args.max_trials, "time_budget_seconds": args.budget, "trial_timeout_seconds": args.trial_timeout,
               "threads": 4, "device": "auto", "compute_profile": "auto", "llm_mode": "disabled"}
     config_path = output / "task.json"
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")

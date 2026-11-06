@@ -62,6 +62,24 @@ def next_candidate(profile, history, metric):
             {'family': 'catboost', 'iterations': 600, 'depth': 6, 'learning_rate': 0.05, 'l2_leaf_reg': 3},
             {'family': 'catboost', 'iterations': 900, 'depth': 8, 'learning_rate': 0.05, 'l2_leaf_reg': 5},
         ]
+    if profile['data_type'] == 'tabular':
+        extra = []
+        if importlib.util.find_spec('catboost') is not None:
+            extra += [
+                {'family': 'catboost', 'iterations': 1200, 'depth': 8, 'learning_rate': .05, 'l2_leaf_reg': 5},
+                {'family': 'catboost', 'iterations': 1800, 'depth': 10, 'learning_rate': .035, 'l2_leaf_reg': 10},
+                {'family': 'catboost_ensemble', 'iterations': 1200, 'depth': 8, 'learning_rate': .05, 'l2_leaf_reg': 5},
+            ]
+        if importlib.util.find_spec('lightgbm') is not None:
+            extra[0:0] = [
+                {'family': 'lightgbm', 'iterations': 800, 'num_leaves': 31, 'learning_rate': .035,
+                 'min_child_samples': 30, 'reg_lambda': 5},
+                {'family': 'lightgbm', 'iterations': 1200, 'num_leaves': 63, 'learning_rate': .025,
+                 'min_child_samples': 40, 'reg_lambda': 10},
+            ]
+            if importlib.util.find_spec('catboost') is not None:
+                extra += [{'family': 'tabular_blend'}]
+        initial[2:2] = extra
     for candidate in initial:
         if candidate_key(candidate) not in tried:
             return candidate, f"Compare a general {candidate['family']} method for {profile['data_type']} data"
@@ -80,6 +98,11 @@ def next_candidate(profile, history, metric):
         if family == "catboost":
             variants = [dict(candidate, iterations=1200), dict(candidate, depth=5),
                         dict(candidate, learning_rate=0.025), dict(candidate, l2_leaf_reg=10)]
+        elif family == 'lightgbm':
+            variants = [dict(candidate, num_leaves=value) for value in (15, 63, 127)]
+            variants += [dict(candidate, iterations=value) for value in (400, 1600)]
+        elif family in {'catboost_ensemble', 'tabular_blend'}:
+            variants = []
         elif family == "logistic":
             variants = [dict(candidate, C=value) for value in (0.1, 10.0, 0.01, 100.0)]
             variants += [dict(candidate, class_weight="balanced")]
@@ -129,6 +152,10 @@ def build_model(profile, candidate, config):
         estimator = NativeBoostClassifier(iterations=candidate['iterations'], depth=candidate['depth'],
                                           learning_rate=candidate['learning_rate'],
                                           l2_leaf_reg=candidate['l2_leaf_reg'], threads=config.threads, **common)
+    elif family in {'lightgbm', 'catboost_ensemble', 'tabular_blend'}:
+        from .tabular_models import advanced_estimator
+
+        estimator = advanced_estimator(candidate, config)
     elif family == "nb":
         estimator = ComplementNB(alpha=candidate["alpha"])
     elif family == "sgd":
@@ -155,7 +182,7 @@ def build_model(profile, candidate, config):
             estimator = TorchClassifier(**params, device=config.device, **common)
     else:
         raise ValueError(f"Unsupported model family: {family}")
-    if family == "catboost":
+    if family in {"catboost", "lightgbm", "catboost_ensemble", "tabular_blend"}:
         from .tabular_models import NativeCategories
 
         return Pipeline([("preprocess", NativeCategories(profile['features'], profile['numeric_columns'])),

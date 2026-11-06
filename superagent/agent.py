@@ -26,7 +26,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def environment():
     versions = {}
-    for name in ("numpy", "pandas", "scikit-learn", "scipy", "joblib", "Pillow", "catboost"):
+    for name in ("numpy", "pandas", "scikit-learn", "scipy", "joblib", "Pillow", "catboost", "lightgbm"):
         try:
             versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
