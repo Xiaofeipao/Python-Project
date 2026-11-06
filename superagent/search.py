@@ -1,6 +1,7 @@
 """A deterministic planner driven by data modality and measured validation feedback."""
 
 import json
+import importlib.util
 
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
@@ -56,6 +57,11 @@ def next_candidate(profile, history, metric):
         # Explore multiple neural configurations even when the first CPU trial
         # wins; a single small network is not a sufficient GPU comparison.
         initial[1:1] = [strong, wider, ensemble]
+    if profile['data_type'] == 'tabular' and importlib.util.find_spec('catboost') is not None:
+        initial[0:0] = [
+            {'family': 'catboost', 'iterations': 600, 'depth': 6, 'learning_rate': 0.05, 'l2_leaf_reg': 3},
+            {'family': 'catboost', 'iterations': 900, 'depth': 8, 'learning_rate': 0.05, 'l2_leaf_reg': 5},
+        ]
     for candidate in initial:
         if candidate_key(candidate) not in tried:
             return candidate, f"Compare a general {candidate['family']} method for {profile['data_type']} data"
@@ -71,7 +77,10 @@ def next_candidate(profile, history, metric):
         family = candidate["family"]
         counts = list(profile.get("class_counts", {}).values())
         imbalanced = bool(counts) and max(counts) / min(counts) >= 2
-        if family == "logistic":
+        if family == "catboost":
+            variants = [dict(candidate, iterations=1200), dict(candidate, depth=5),
+                        dict(candidate, learning_rate=0.025), dict(candidate, l2_leaf_reg=10)]
+        elif family == "logistic":
             variants = [dict(candidate, C=value) for value in (0.1, 10.0, 0.01, 100.0)]
             variants += [dict(candidate, class_weight="balanced")]
         elif family in {"extra_trees", "random_forest"}:
@@ -108,10 +117,18 @@ def build_model(profile, candidate, config):
         estimator = LogisticRegression(C=candidate["C"], solver="lbfgs", max_iter=1200,
                                        class_weight=candidate.get("class_weight"), **common)
     elif family in {"extra_trees", "random_forest"}:
-        cls = ExtraTreesClassifier if family == "extra_trees" else RandomForestClassifier
+        from .tabular_models import BalancedExtraTrees, BalancedRandomForest
+
+        cls = BalancedExtraTrees if family == "extra_trees" else BalancedRandomForest
         estimator = cls(n_estimators=candidate["n_estimators"], max_depth=candidate["max_depth"],
                         min_samples_leaf=candidate["min_samples_leaf"], n_jobs=config.threads,
                         class_weight=candidate.get("class_weight"), **common)
+    elif family == "catboost":
+        from .tabular_models import NativeBoostClassifier
+
+        estimator = NativeBoostClassifier(iterations=candidate['iterations'], depth=candidate['depth'],
+                                          learning_rate=candidate['learning_rate'],
+                                          l2_leaf_reg=candidate['l2_leaf_reg'], threads=config.threads, **common)
     elif family == "nb":
         estimator = ComplementNB(alpha=candidate["alpha"])
     elif family == "sgd":
@@ -138,5 +155,10 @@ def build_model(profile, candidate, config):
             estimator = TorchClassifier(**params, device=config.device, **common)
     else:
         raise ValueError(f"Unsupported model family: {family}")
+    if family == "catboost":
+        from .tabular_models import NativeCategories
+
+        return Pipeline([("preprocess", NativeCategories(profile['features'], profile['numeric_columns'])),
+                         ("classifier", estimator)])
     return Pipeline([("preprocess", preprocessor(profile, candidate, config.image_root)),
                      ("classifier", estimator)])

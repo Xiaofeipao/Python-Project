@@ -177,7 +177,9 @@ class FormalRequirements(unittest.TestCase):
                 import time
 
                 candidate, _ = planner.choose(self.profile(), history, "accuracy", time.monotonic() + 30)
-            self.assertEqual(candidate["family"], "logistic")
+            request = json.loads(next((output / "model_calls").glob("*.request.json")).read_text(encoding="utf-8"))
+            menu = json.loads(request["body"]["messages"][1]["content"])["menu"]
+            self.assertEqual(candidate, menu[0]["candidate"])
             self.assertEqual(planner.export_usage()["actual_recorded_cost_rmb"], "0.00012")
 
 
