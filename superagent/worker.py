@@ -30,6 +30,9 @@ def main():
         candidate = request["candidate"]
         model = build_model(request["profile"], candidate, config)
         model.memory = request.get("feature_cache")
+        estimator = model.named_steps['classifier']
+        if hasattr(estimator, 'cache_dir') and request.get('feature_cache'):
+            estimator.set_params(cache_dir=str(Path(request['feature_cache']) / 'members'))
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             if request["mode"] == "trial":
@@ -47,6 +50,8 @@ def main():
                 model.fit(all_data, labels(all_data, config.target_column))
                 # Prediction has no dependency on the training disk cache.
                 model.memory = None
+                if hasattr(model.named_steps['classifier'], 'cache_dir'):
+                    model.named_steps['classifier'].set_params(cache_dir=None)
                 destination = Path(request["model_path"])
                 temporary = destination.with_name(destination.name + ".tmp")
                 joblib.dump({"model": model, "metadata": request["metadata"]}, temporary)
@@ -55,6 +60,8 @@ def main():
         estimator = model.named_steps["classifier"]
         if hasattr(estimator, "training_report_"):
             result["training_resources"] = estimator.training_report_
+        elif hasattr(estimator, "resource_report_"):
+            result["training_resources"] = estimator.resource_report_
         result["warnings"] = list(dict.fromkeys(str(item.message) for item in caught))[:30]
         result["elapsed_seconds"] = time.monotonic() - started
         write_json(result_path, result)

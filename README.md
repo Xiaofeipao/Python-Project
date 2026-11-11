@@ -4,6 +4,10 @@
 
 表格搜索比较 CatBoost、LightGBM、传统树模型、线性模型和可用的神经网络，并探索多随机种子集成及不同提升树的概率融合。类别值和缺失值在训练流程中统一处理；类别统计与编码只在拟合数据中建立，不使用外部验证或测试数据。候选容量、迭代数和正则化根据验证结果自主调整，不根据数据集名称选择算法。
 
+多个文本列还会比较保留列位置的向量拼接；恰有两列时，增加共享词表的有符号差分，避免拼接词袋丢失列间关系。GPU 环境可额外比较 XGBoost 和 CPU CatBoost／GPU XGBoost 融合；使用 `requirements-gpu.txt` 安装可选依赖。所有新候选仍按同一验证指标自动比较。
+
+文本搜索也包含词级与字符级联合表示；融合模型可比较不同成员权重，并缓存相同训练数据与参数下的成员，避免重复训练。最终模型不依赖训练缓存。
+
 ## 1. 安装环境
 
 要求 Python 3.10+。在项目根目录、已激活的 Python 环境中执行：
@@ -80,6 +84,14 @@ python main.py evaluate --model runs/task_01/model.joblib --input data/test.csv 
 提交材料包括源码与统一入口、依赖与 README、各任务模型和结果、执行日志、`report.pdf` 及 AI 工具使用声明。报告结构见 `docs/report_template.md`；原始课程要求见 `AIAA3102 - Final Project - Full Assignment Requirements.md`。
 
 ## 7. 检查
+
+已提供任务数据时，可自动使用同一冻结版本运行两项 Released Tasks：
+
+```bash
+python scripts/run_released_batch.py --output runs/unified_run --max-trials 36
+```
+
+脚本读取项目根目录下的 `in_vehicle_coupon_recommendation/` 和 `Released_Task2-Headlines_CTR/`，依次完成训练、预测与最终评估。NumPy 数据转换保持原始划分和行顺序；测试数据只在该任务选型、重训后读取。数据和运行产物不包含在 Git 仓库中，输出目录必须不存在。
 
 ```bash
 python -m unittest discover -s tests -v

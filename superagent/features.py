@@ -4,12 +4,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 from PIL import Image, ImageOps
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
-from sklearn.pipeline import Pipeline
+from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
@@ -57,6 +58,41 @@ class JoinText(BaseEstimator, TransformerMixin):
         return X[self.columns].fillna("").astype(str).agg(" ".join, axis=1).tolist()
 
 
+class MultiTextFeatures(BaseEstimator, TransformerMixin):
+    """Shared training vocabulary, preserving column identity or signed differences."""
+    def __init__(self, columns, analyzer="word", representation="difference", max_features=30000):
+        self.columns = columns
+        self.analyzer = analyzer
+        self.representation = representation
+        self.max_features = max_features
+
+    def fit(self, X, y=None):
+        character = self.analyzer == 'char'
+        self.vectorizer_ = TfidfVectorizer(analyzer='char' if character else 'word',
+            ngram_range=(2, 5) if character else (1, 2), min_df=2,
+            token_pattern=None if character else r'(?u)\b\w+\b',
+            max_features=self.max_features, sublinear_tf=True, dtype=np.float32)
+        if self.analyzer == 'combined':
+            self.vectorizer_ = FeatureUnion([
+                ('word', self.vectorizer_),
+                ('char', TfidfVectorizer(analyzer='char', ngram_range=(2, 5), min_df=2,
+                                         max_features=self.max_features, sublinear_tf=True, dtype=np.float32))])
+        self.vectorizer_.fit(pd.concat([X[c].fillna('').astype(str) for c in self.columns], ignore_index=True))
+        return self
+
+    def transform(self, X):
+        texts = [X[c].fillna('').astype(str) for c in self.columns]
+        vectors = [self.vectorizer_.transform(t) for t in texts]
+        stats = [np.asarray([[np.log1p(len(s)), np.log1p(len(s.split())), s.count('?'), s.count('!'),
+                              sum(ch.isdigit() for ch in s), sum(ch.isupper() for ch in s)] for s in t], dtype=np.float32)
+                 for t in texts]
+        if self.representation == 'difference':
+            if len(vectors) != 2:
+                raise ValueError('Signed text differences require two input columns')
+            return sparse.hstack([vectors[0] - vectors[1], sparse.csr_matrix(stats[0] - stats[1])], format='csr')
+        return sparse.hstack([*vectors, sparse.csr_matrix(np.hstack(stats))], format='csr')
+
+
 class ImageFeatures(BaseEstimator, TransformerMixin):
     def __init__(self, column, root, size=24):
         self.column = column
@@ -87,6 +123,10 @@ def preprocessor(profile, candidate, image_root):
         return ConstantFeatures()
     modality = profile["data_type"]
     if modality == "text":
+        if candidate.get('representation'):
+            return MultiTextFeatures(profile['text_columns'], candidate.get('analyzer', 'word'),
+                                     candidate['representation'],
+                                     10000 if candidate['family'].startswith('torch_') else 30000)
         character = candidate.get("analyzer", "word") == "char"
         return Pipeline([
             ("join", JoinText(profile["text_columns"])),

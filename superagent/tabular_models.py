@@ -1,6 +1,7 @@
 """Portable general tabular estimators, independent of dataset identity."""
 
 import numpy as np
+from joblib import Memory
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 
@@ -110,21 +111,71 @@ class NativeLeafBoost(ClassifierMixin, BaseEstimator):
         return self.classes_[self.predict_proba(X).argmax(axis=1)]
 
 
-class ProbabilityBlend(ClassifierMixin, BaseEstimator):
-    def __init__(self, estimators):
-        self.estimators = estimators
+class EncodedXGBoost(ClassifierMixin, BaseEstimator):
+    def __init__(self, iterations=1600, depth=6, learning_rate=.03, reg_lambda=10,
+                 random_state=42, threads=1, device='cuda'):
+        self.iterations = iterations
+        self.depth = depth
+        self.learning_rate = learning_rate
+        self.reg_lambda = reg_lambda
+        self.random_state = random_state
+        self.threads = threads
+        self.device = device
 
     def fit(self, X, y):
-        self.members_ = [clone(estimator).fit(X, y) for estimator in self.estimators]
+        from xgboost import XGBClassifier
+        self.classes_, encoded = np.unique(np.asarray(y, dtype=str), return_inverse=True)
+        self.model_ = XGBClassifier(n_estimators=self.iterations, max_depth=self.depth,
+            learning_rate=self.learning_rate, reg_lambda=self.reg_lambda,
+            subsample=.85, colsample_bytree=.85, min_child_weight=3,
+            random_state=self.random_state, n_jobs=self.threads, tree_method='hist', device=self.device)
+        self.model_.fit(X, encoded)
+        self.resource_report_ = {'device': self.device, 'backend': 'xgboost', 'training_rows': X.shape[0]}
+        # Use CPU inference so the saved pipeline does not require CUDA.
+        self.model_.set_params(device='cpu')
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def predict_proba(self, X):
+        return self.model_.predict_proba(X)
+
+    def predict(self, X):
+        return self.classes_[self.predict_proba(X).argmax(axis=1)]
+
+
+
+def fit_member(estimator, X, y):
+    return clone(estimator).fit(X, y)
+
+
+class ProbabilityBlend(ClassifierMixin, BaseEstimator):
+    def __init__(self, estimators, weights=None, cache_dir=None):
+        self.estimators = estimators
+        self.weights = weights
+        self.cache_dir = cache_dir
+
+    def fit(self, X, y):
+        fit = Memory(self.cache_dir, verbose=0).cache(fit_member) if self.cache_dir else fit_member
+        self.members_ = [fit(estimator, X, y) for estimator in self.estimators]
         self.classes_ = self.members_[0].classes_
         for member in self.members_:
             if not np.array_equal(member.classes_, self.classes_):
                 raise ValueError("Ensemble members have inconsistent class order")
         self.n_features_in_ = X.shape[1]
+        leaves = [m.named_steps['classifier'] if hasattr(m, 'named_steps') else m for m in self.members_]
+        resources = [getattr(m, 'resource_report_', {}) for m in leaves]
+        self.resource_report_ = {'device': 'cuda' if any(r.get('device') == 'cuda' for r in resources) else 'cpu',
+                                 'members': resources}
         return self
 
     def predict_proba(self, X):
-        return np.mean([member.predict_proba(X) for member in self.members_], axis=0)
+        return np.average([member.predict_proba(X) for member in self.members_], axis=0,
+                          weights=getattr(self, 'weights', None))
+
+    def __setstate__(self, state):
+        super().__setstate__(state)
+        self.__dict__.setdefault('weights', None)
+        self.__dict__.setdefault('cache_dir', None)
 
     def predict(self, X):
         return self.classes_[self.predict_proba(X).argmax(axis=1)]

@@ -80,6 +80,21 @@ def next_candidate(profile, history, metric):
             if importlib.util.find_spec('catboost') is not None:
                 extra += [{'family': 'tabular_blend'}]
         initial[2:2] = extra
+    if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) > 1:
+        ordered = [{'family': 'logistic', 'C': c, 'analyzer': analyzer, 'representation': mode}
+                   for mode in ('difference', 'separate') for analyzer in ('word', 'char', 'combined') for c in (.1, 1., 10.)
+                   if mode != 'difference' or len(profile['text_columns']) == 2]
+        if large_gpu:
+            ordered += [{'family': 'torch_mlp', 'architecture': 'mlp', 'hidden': 128, 'epochs': 60,
+                         'learning_rate': .001, 'weight_decay': .01, 'early_stopping': True,
+                         'analyzer': a, 'representation': 'separate'} for a in ('word', 'char', 'combined')]
+        initial[0:0] = ordered
+    if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
+        initial[0:0] = [{'family': 'cross_boost_blend'}] + [
+            {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
+            {'family': 'xgboost', 'iterations': count, 'depth': depth, 'learning_rate': .03,
+             'reg_lambda': regularization} for count, depth, regularization in
+            ((2000, 4, 10), (1600, 6, 10), (1200, 8, 20))]
     for candidate in initial:
         if candidate_key(candidate) not in tried:
             return candidate, f"Compare a general {candidate['family']} method for {profile['data_type']} data"
@@ -102,6 +117,10 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, num_leaves=value) for value in (15, 63, 127)]
             variants += [dict(candidate, iterations=value) for value in (400, 1600)]
         elif family in {'catboost_ensemble', 'tabular_blend'}:
+            variants = []
+        elif family == 'xgboost':
+            variants = [dict(candidate, reg_lambda=value) for value in (1, 20, 50)]
+        elif family == 'cross_boost_blend':
             variants = []
         elif family == "logistic":
             variants = [dict(candidate, C=value) for value in (0.1, 10.0, 0.01, 100.0)]
@@ -156,6 +175,22 @@ def build_model(profile, candidate, config):
         from .tabular_models import advanced_estimator
 
         estimator = advanced_estimator(candidate, config)
+    elif family == 'xgboost':
+        from .tabular_models import EncodedXGBoost
+        estimator = EncodedXGBoost(iterations=candidate['iterations'], depth=candidate['depth'],
+                                    learning_rate=candidate['learning_rate'], reg_lambda=candidate['reg_lambda'],
+                                    threads=config.threads, **common)
+    elif family == 'cross_boost_blend':
+        from .tabular_models import ProbabilityBlend, NativeBoostClassifier, EncodedXGBoost
+        encoded = Pipeline([('preprocess', preprocessor(profile, {'family': 'xgboost'}, config.image_root)),
+                            ('classifier', EncodedXGBoost(iterations=candidate.get('iterations', 1600),
+                                                         random_state=config.seed, threads=config.threads))])
+        weight = candidate.get('gpu_weight', .25)
+        estimator = ProbabilityBlend([
+            *[NativeBoostClassifier(iterations=candidate.get('iterations', 1200), depth=8, learning_rate=.05,
+                                    l2_leaf_reg=5, threads=config.threads,
+                                    random_state=config.seed + 101 * index) for index in range(3)], encoded],
+            weights=[(1 - weight) / 3] * 3 + [weight])
     elif family == "nb":
         estimator = ComplementNB(alpha=candidate["alpha"])
     elif family == "sgd":
@@ -182,7 +217,7 @@ def build_model(profile, candidate, config):
             estimator = TorchClassifier(**params, device=config.device, **common)
     else:
         raise ValueError(f"Unsupported model family: {family}")
-    if family in {"catboost", "lightgbm", "catboost_ensemble", "tabular_blend"}:
+    if family in {"catboost", "lightgbm", "catboost_ensemble", "tabular_blend", "cross_boost_blend"}:
         from .tabular_models import NativeCategories
 
         return Pipeline([("preprocess", NativeCategories(profile['features'], profile['numeric_columns'])),
