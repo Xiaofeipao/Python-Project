@@ -4,10 +4,12 @@ import json
 import importlib.util
 
 from sklearn.dummy import DummyClassifier
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.naive_bayes import ComplementNB
 from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC, SVC
 
 from .features import preprocessor
 from .metrics import utility
@@ -89,12 +91,29 @@ def next_candidate(profile, history, metric):
                          'learning_rate': .001, 'weight_decay': .01, 'early_stopping': True,
                          'analyzer': a, 'representation': 'separate'} for a in ('word', 'char', 'combined')]
         initial[0:0] = ordered
+        initial[0:0] = [
+            {'family': 'logistic', 'C': 1., 'analyzer': 'char', 'representation': 'separate',
+             'class_weight': 'balanced'},
+            *[{'family': 'linear_svm', 'C': c, 'analyzer': analyzer, 'representation': mode}
+              for mode in ('difference', 'separate') for analyzer in ('char', 'combined') for c in (.1, 1., 10.)
+              if mode != 'difference' or len(profile['text_columns']) == 2],
+            *[{'family': 'rbf_svm', 'C': c, 'analyzer': 'combined', 'representation': 'separate',
+               'svd_components': 128} for c in (1., 10.)],
+        ]
+        if large_gpu and importlib.util.find_spec('xgboost') is not None:
+            initial[1:1] = [
+                {'family': 'xgboost', 'iterations': 1000, 'depth': depth, 'learning_rate': .03,
+                 'reg_lambda': 10, 'analyzer': 'combined', 'representation': 'separate',
+                 'svd_components': 128} for depth in (3, 6)]
     if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
         initial[0:0] = [{'family': 'cross_boost_blend'}] + [
             {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
             {'family': 'xgboost', 'iterations': count, 'depth': depth, 'learning_rate': .03,
              'reg_lambda': regularization} for count, depth, regularization in
             ((2000, 4, 10), (1600, 6, 10), (1200, 8, 20))]
+        initial[1:1] = [
+            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': weight,
+             'leaf_weight': leaf} for weight, leaf in ((.25, 0.), (.5, 0.), (.25, .15))]
     for candidate in initial:
         if candidate_key(candidate) not in tried:
             return candidate, f"Compare a general {candidate['family']} method for {profile['data_type']} data"
@@ -122,6 +141,8 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, reg_lambda=value) for value in (1, 20, 50)]
         elif family == 'cross_boost_blend':
             variants = []
+        elif family in {"linear_svm", "rbf_svm"}:
+            variants = [dict(candidate, C=value) for value in (.01, 100.)]
         elif family == "logistic":
             variants = [dict(candidate, C=value) for value in (0.1, 10.0, 0.01, 100.0)]
             variants += [dict(candidate, class_weight="balanced")]
@@ -158,6 +179,12 @@ def build_model(profile, candidate, config):
     elif family == "logistic":
         estimator = LogisticRegression(C=candidate["C"], solver="lbfgs", max_iter=1200,
                                        class_weight=candidate.get("class_weight"), **common)
+    elif family == 'linear_svm':
+        estimator = CalibratedClassifierCV(LinearSVC(C=candidate['C'], dual='auto', max_iter=10000,
+                                                     **common), cv=3, n_jobs=config.threads)
+    elif family == 'rbf_svm':
+        estimator = CalibratedClassifierCV(SVC(C=candidate['C'], cache_size=512, **common),
+                                           cv=3, ensemble=False, n_jobs=config.threads)
     elif family in {"extra_trees", "random_forest"}:
         from .tabular_models import BalancedExtraTrees, BalancedRandomForest
 
@@ -181,16 +208,21 @@ def build_model(profile, candidate, config):
                                     learning_rate=candidate['learning_rate'], reg_lambda=candidate['reg_lambda'],
                                     threads=config.threads, **common)
     elif family == 'cross_boost_blend':
-        from .tabular_models import ProbabilityBlend, NativeBoostClassifier, EncodedXGBoost
-        encoded = Pipeline([('preprocess', preprocessor(profile, {'family': 'xgboost'}, config.image_root)),
+        from .tabular_models import ProbabilityBlend, NativeBoostClassifier, EncodedXGBoost, NativeLeafBoost
+        encoded = [Pipeline([('preprocess', preprocessor(profile, {'family': 'xgboost'}, config.image_root)),
                             ('classifier', EncodedXGBoost(iterations=candidate.get('iterations', 1600),
-                                                         random_state=config.seed, threads=config.threads))])
+                                                         random_state=config.seed + 101 * index,
+                                                         threads=config.threads))])
+                   for index in range(candidate.get('gpu_seeds', 1))]
         weight = candidate.get('gpu_weight', .25)
+        leaf = candidate.get('leaf_weight', 0.)
         estimator = ProbabilityBlend([
             *[NativeBoostClassifier(iterations=candidate.get('iterations', 1200), depth=8, learning_rate=.05,
                                     l2_leaf_reg=5, threads=config.threads,
-                                    random_state=config.seed + 101 * index) for index in range(3)], encoded],
-            weights=[(1 - weight) / 3] * 3 + [weight])
+                                    random_state=config.seed + 101 * index) for index in range(3)], *encoded,
+            *([NativeLeafBoost(random_state=config.seed, threads=config.threads)] if leaf else [])],
+            weights=[(1 - weight - leaf) / 3] * 3 + [weight / len(encoded)] * len(encoded)
+                    + ([leaf] if leaf else []))
     elif family == "nb":
         estimator = ComplementNB(alpha=candidate["alpha"])
     elif family == "sgd":

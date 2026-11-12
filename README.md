@@ -88,7 +88,7 @@ python main.py evaluate --model runs/task_01/model.joblib --input data/test.csv 
 已提供任务数据时，可自动使用同一冻结版本运行两项 Released Tasks：
 
 ```bash
-python scripts/run_released_batch.py --output runs/unified_run --max-trials 36
+python scripts/run_released_batch.py --output runs/unified_run --max-trials 56
 ```
 
 脚本读取项目根目录下的 `in_vehicle_coupon_recommendation/` 和 `Released_Task2-Headlines_CTR/`，依次完成训练、预测与最终评估。NumPy 数据转换保持原始划分和行顺序；测试数据只在该任务选型、重训后读取。数据和运行产物不包含在 Git 仓库中，输出目录必须不存在。

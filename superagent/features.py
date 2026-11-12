@@ -8,6 +8,7 @@ from scipy import sparse
 from PIL import Image, ImageOps
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline, FeatureUnion
@@ -21,6 +22,22 @@ class ConstantFeatures(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         return np.zeros((len(X), 1), dtype=np.float32)
+
+
+class BoundedSVD(BaseEstimator, TransformerMixin):
+    """Fit a training-only projection, including on small input matrices."""
+    def __init__(self, n_components=128):
+        self.n_components = n_components
+
+    def fit(self, X, y=None):
+        count = min(self.n_components, X.shape[0], X.shape[1])
+        self.model_ = TruncatedSVD(n_components=count, random_state=42) if X.shape[1] > 1 else None
+        if self.model_ is not None:
+            self.model_.fit(X)
+        return self
+
+    def transform(self, X):
+        return self.model_.transform(X) if self.model_ is not None else X.toarray()
 
 
 class FrameSchema(BaseEstimator, TransformerMixin):
@@ -124,9 +141,13 @@ def preprocessor(profile, candidate, image_root):
     modality = profile["data_type"]
     if modality == "text":
         if candidate.get('representation'):
-            return MultiTextFeatures(profile['text_columns'], candidate.get('analyzer', 'word'),
+            features = MultiTextFeatures(profile['text_columns'], candidate.get('analyzer', 'word'),
                                      candidate['representation'],
                                      10000 if candidate['family'].startswith('torch_') else 30000)
+            if candidate.get('svd_components'):
+                return Pipeline([('text', features), ('svd', BoundedSVD(candidate['svd_components'])),
+                                 ('scale', StandardScaler())])
+            return features
         character = candidate.get("analyzer", "word") == "char"
         return Pipeline([
             ("join", JoinText(profile["text_columns"])),

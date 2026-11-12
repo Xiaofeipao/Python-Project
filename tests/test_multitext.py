@@ -6,6 +6,32 @@ from superagent.tabular_models import EncodedXGBoost
 
 
 class MultiTextTests(unittest.TestCase):
+    def test_calibrated_and_projected_text_models(self):
+        import tempfile, joblib
+        from pathlib import Path
+        from superagent.features import BoundedSVD
+        from superagent.search import build_model
+        from superagent.config import TaskConfig
+        X = pd.DataFrame({'a': ['good title', 'bad title'] * 12,
+                          'b': ['bad title', 'good title'] * 12})
+        profile = {'data_type': 'text', 'text_columns': ['a', 'b']}
+        for family in ('linear_svm', 'rbf_svm'):
+            candidate = {'family': family, 'C': 1., 'analyzer': 'combined', 'representation': 'separate'}
+            if family == 'rbf_svm':
+                candidate['svd_components'] = 128
+            model = build_model(profile, candidate, TaskConfig(train_csv='unused', target_column='label'))
+            model.fit(X, ['yes', 'no'] * 12)
+            query = pd.DataFrame({'a': ['unseen headline'], 'b': ['good title']})
+            expected = model.predict_proba(query)
+            np.testing.assert_allclose(expected.sum(axis=1), 1)
+            with tempfile.TemporaryDirectory() as folder:
+                path = Path(folder) / 'text.joblib'
+                joblib.dump(model, path)
+                np.testing.assert_allclose(joblib.load(path).predict_proba(query), expected)
+        from scipy import sparse
+        tiny = sparse.csr_matrix([[1.], [2.]])
+        np.testing.assert_equal(BoundedSVD().fit_transform(tiny), tiny.toarray())
+
     def test_combined_features_and_weighted_member_cache(self):
         import tempfile
         from joblib import Memory
@@ -57,7 +83,8 @@ class MultiTextTests(unittest.TestCase):
         X = pd.DataFrame({'kind': ['a', 'b', None] * 20})
         profile = {'data_type': 'tabular', 'features': ['kind'], 'numeric_columns': [],
                    'categorical_columns': ['kind']}
-        model = build_model(profile, {'family': 'cross_boost_blend', 'iterations': 5},
+        model = build_model(profile, {'family': 'cross_boost_blend', 'iterations': 5,
+                                     'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': .15},
                             TaskConfig(train_csv='unused', target_column='label'))
         model.fit(X, ['yes', 'no', 'yes'] * 20)
         query = pd.DataFrame({'kind': ['unknown', None]})

@@ -24,7 +24,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'runs/released_gpu_batch_20261111')
     parser.add_argument('--tasks', nargs='+', choices=['coupon', 'headlines'], default=['coupon', 'headlines'])
-    parser.add_argument('--max-trials', type=int, default=36)
+    parser.add_argument('--max-trials', type=int, default=56)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
