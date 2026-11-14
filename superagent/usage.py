@@ -223,13 +223,19 @@ class UsageLedger:
             write_json(self.path, state)
             return call
 
-    def finish(self, call_id, model, usage=None, error=None):
+    def finish(self, call_id, model, usage=None, error=None, dns_not_sent=False):
         with self.locked():
             state = self._read()
             call = next(item for item in state["calls"] if item["call_id"] == call_id)
             if call["status"] != "pending":
                 raise UsageUncertain("Model request was already finalized")
-            if usage is None:
+            if dns_not_sent:
+                if usage is not None or error != 'DNSResolutionError':
+                    raise ValueError('Zero usage requires a verified pre-connection DNS failure')
+                call.update(status='recorded', error=error, request_sent=False,
+                            input_tokens=0, output_tokens=0, cost_rmb='0', accounting_complete=True,
+                            usage_basis='Local DNS failed before any HTTP request could be sent')
+            elif usage is None:
                 call.update(status="usage_unknown", error=error,
                             cost_rmb=None, accounting_complete=False)
             else:

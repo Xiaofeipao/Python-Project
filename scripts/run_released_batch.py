@@ -24,27 +24,35 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'runs/released_gpu_batch_20261111')
     parser.add_argument('--tasks', nargs='+', choices=['coupon', 'headlines'], default=['coupon', 'headlines'])
-    parser.add_argument('--max-trials', type=int, default=56)
+    parser.add_argument('--max-trials', type=int, default=40)
+    parser.add_argument('--llm-registry', type=Path, help='Enable API planning using this model registry')
+    parser.add_argument('--llm-model', default='DeepSeek-V4.1-Flash')
+    parser.add_argument('--key-file', type=Path, help='Read credentials locally; never copied to outputs')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     os.environ['SUPERAGENT_USAGE_ROOT'] = str(ROOT / '.model_usage')
     policy = {'max_trials': args.max_trials, 'time_budget_seconds': 2400, 'trial_timeout_seconds': 600,
-              'threads': 4, 'device': 'cuda', 'compute_profile': 'gpu_large', 'llm_mode': 'disabled'}
+              'threads': 4, 'device': 'auto', 'compute_profile': 'auto', 'llm_mode': 'disabled'}
+    if args.llm_registry:
+        if args.key_file:
+            os.environ['HKUST_API_KEY'] = args.key_file.read_text(encoding='utf-8-sig').strip()
+        policy.update(llm_mode='required', llm_registry=str(args.llm_registry.resolve()),
+                      llm_model_id=args.llm_model, llm_base_url='https://aigc-api.hkust-gz.edu.cn/api/v2',
+                      llm_max_output_tokens=2048, llm_timeout_seconds=60, llm_budget_rmb='20')
     (output / 'policy.json').write_text(json.dumps(policy, indent=2), encoding='utf-8')
     frozen = invoke(output, ROOT / 'main.py', 'freeze', '--policy', output / 'policy.json',
                     '--output', output / 'frozen_agent')
     entry = output / 'frozen_agent/main.py'
     inputs = [
         ('coupon', ROOT / 'in_vehicle_coupon_recommendation', 'train.csv', 'val.csv', 'test.csv',
-         {'data_type': 'tabular', 'target_column': 'label', 'id_column': 'id'}, .7922743397713835),
+         {'data_type': 'tabular', 'target_column': 'label', 'id_column': 'id'}),
         ('headlines', ROOT / 'Released_Task2-Headlines_CTR', 'train.csv', 'val.csv', 'test.csv',
-         {'data_type': 'text', 'target_column': 'label_pairwise', 'text_columns': ['headline_A', 'headline_B']},
-         .6605816831683168),
+         {'data_type': 'text', 'target_column': 'label_pairwise', 'text_columns': ['headline_A', 'headline_B']}),
     ]
     results = {'purpose': 'Development comparison; reused test data is not independent final evaluation',
                'runtime_sha256': frozen['runtime_sha256'], 'tasks': {}}
-    for name, data, train, val, test, fields, baseline in inputs:
+    for name, data, train, val, test, fields in inputs:
         if name not in args.tasks:
             continue
         folder = output / name
@@ -69,8 +77,8 @@ def main():
                    '--input', data / test, '--output', folder / 'agent/predictions.csv')
             evaluation = invoke(folder, entry, 'evaluate', '--model', folder / 'agent/model.joblib',
                                 '--input', data / test, '--output', folder / 'test_evaluation.json')
-            results['tasks'][name] = {'status': 'completed', 'baseline_accuracy': baseline,
-                                      'accuracy': evaluation['score'], 'improved': evaluation['score'] > baseline,
+            results['tasks'][name] = {'status': 'completed',
+                                      'accuracy': evaluation['score'],
                                       'training': summary, 'evaluation': evaluation}
         except Exception as error:
             results['tasks'][name] = {'status': 'failed', 'error': str(error)}

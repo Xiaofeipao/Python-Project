@@ -1,0 +1,17 @@
+{
+  "train_csv": "train.csv",
+  "validation_csv": "val.csv",
+  "test_csv": "test.csv",
+  "target_column": "label",
+  "id_column": "id",
+  "data_type": "auto",
+  "device": "cpu",
+  "compute_profile": "auto",
+  "enable_torch": false,
+  "threads": 2,
+  "max_trials": 3,
+  "time_budget_seconds": 120,
+  "trial_timeout_seconds": 30,
+  "llm_mode": "disabled",
+  "metric": "accuracy"
+}

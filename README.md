@@ -88,7 +88,7 @@ python main.py evaluate --model runs/task_01/model.joblib --input data/test.csv 
 已提供任务数据时，可自动使用同一冻结版本运行两项 Released Tasks：
 
 ```bash
-python scripts/run_released_batch.py --output runs/unified_run --max-trials 56
+python scripts/run_released_batch.py --output runs/unified_run --max-trials 40
 ```
 
 脚本读取项目根目录下的 `in_vehicle_coupon_recommendation/` 和 `Released_Task2-Headlines_CTR/`，依次完成训练、预测与最终评估。NumPy 数据转换保持原始划分和行顺序；测试数据只在该任务选型、重训后读取。数据和运行产物不包含在 Git 仓库中，输出目录必须不存在。
@@ -98,3 +98,26 @@ python -m unittest discover -s tests -v
 ```
 
 本地开发基准可通过 `scripts/benchmark.py` 运行；使用内置数据和合成文本，不代表课程正式成绩。GPU 网络从头训练，不下载预训练权重。
+
+## 8. 本项目如何对应课程评分标准
+
+- General Design（30%）：`superagent/llm_planner.py` 基于已完成实验的验证反馈，要求输出 `diagnosis`、`next_action` 和放弃策略；连续两次失败的模型族退出候选菜单。记录在 `events.jsonl`，不声称模型能执行任意生成代码。
+- Released / Unseen Performance（20% / 10%）：`agent.py` 自主验证选型，`prediction.py` 只做推理与最终评估。`partial/vNNN/` 保存逐次改进的部分模型及预测；后续失败时保留已有版本。批量脚本移除了历史硬编码成绩。
+- Execution / Reproducibility（10%）：冻结源码、输入哈希、调用账本、`summary.json` 和 `tests/test_resilience.py`。设备自动选择；分配失败时减小 batch，再尝试 CPU；无法恢复的异常保留诊断。
+- Presentation（30%）：运行 `python scripts/decision_timeline.py <events.jsonl路径> --output Timeline.md` 提取真实决策时间线，不补写不存在的反思，不擅自改变课程指定指标。
+
+默认最多 40 次实验，同时受时间和费用限制；`max_cost_rmb` 默认 15 元，下一次最坏情况调用无法容纳时停止搜索，任务累计总额仍不超过 20 元。正式策略 `configs/final_policy.json` 启用 Flash API，密钥按 API 使用说明通过环境变量提供；开发测试可显式关闭 API。
+
+`test_set_used_for_selection: false` 表示测试标签与成绩不进入搜索。开启 `progressive_output` 时，部分模型固定后可提前预测测试特征；日志明确标记 `partial_test_read_started`。最终模型的 `selection_completed` 先于最终 `test_read_started`，单元测试断言该顺序。若要求整个搜索结束前完全不读取测试文件，请设置 `progressive_output: false`，仍可保留最终产出流程。
+
+## 9. 无 GPU 端到端演示
+
+`examples/cpu_smoke/` 使用 scikit-learn 自带 Iris 数据的固定分层划分，提供真实预测、摘要和事件日志；它只是运行证据，不能替代课程任务成绩，也不证明真实 LLM 调用。该演示显式禁用 CUDA 和 LLM，调用数为零。
+
+```powershell
+$env:CUDA_VISIBLE_DEVICES = '-1'
+python main.py train --config examples/cpu_smoke/task.json --output runs/cpu_smoke_new
+python main.py predict --model runs/cpu_smoke_new/model.joblib --input examples/cpu_smoke/test.csv --output runs/cpu_smoke_new/reloaded_predictions.csv
+```
+
+模型保存在上述本地输出目录；仓库保存脱敏后的真实日志、预测和复现输入，完整源码快照及环境信息保留在原运行目录。

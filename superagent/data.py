@@ -48,6 +48,11 @@ def inspect_data(config):
     modality = config.data_type
     text_columns = config.text_columns
     if modality == "auto":
+        if not config.image_column:
+            image_candidates = [c for c in features if not is_numeric_dtype(frame[c])
+                and frame[c].dropna().astype(str).str.lower().str.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp')).mean() > .9]
+            if len(image_candidates) == 1:
+                config.image_column = image_candidates[0]
         if config.image_column:
             modality = "image"
         elif text_columns:
@@ -68,6 +73,8 @@ def inspect_data(config):
         features = [config.image_column]
     numeric = [c for c in features if is_numeric_dtype(frame[c])]
     profile = {
+        "modality_evidence": {"image_column": config.image_column, "text_columns": text_columns,
+                              "rule": "Explicit columns, then image extensions (>90%), then median text length (>80)"},
         "rows": len(frame), "features": features, "data_type": modality,
         "numeric_columns": numeric, "categorical_columns": [c for c in features if c not in numeric],
         "text_columns": text_columns, "image_column": config.image_column,

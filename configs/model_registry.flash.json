@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "pricing_as_of": "2026-10-21",
+  "currency": "CNY",
+  "models": [
+    {
+      "model_id": "DeepSeek-V4.1-Flash",
+      "family": "DeepSeek",
+      "release_date": "2026-09-10",
+      "context_window_tokens": 1048576,
+      "standard_pricing": true,
+      "input_rmb_per_million": "1",
+      "output_rmb_per_million": "4",
+      "response_model_ids": [
+        "DeepSeek-V4.1-Flash"
+      ],
+      "pricing_note": "User-requested fixed off-peak accounting at official rates effective 2026-09-10; cache-miss rate for all input. Not the school platform actual charge.",
+      "deployment_note": "School platform returns DeepSeek-V4.1-Flash; exact revision not independently attested. Development API experiment.",
+      "evidence": [
+        {
+          "snapshot": "evidence/flash_20260910_prices_cn.jpeg",
+          "official_url": "https://api-docs.deepseek.com/zh-cn/img/v4.1_260910_price_cn.jpeg",
+          "sha256": "701177bc7d46edd0faf9a761123f89196ae0d2bbd70e69ba272028c641f1582c"
+        },
+        {
+          "snapshot": "evidence/flash_20260910_release.html",
+          "official_url": "https://api-docs.deepseek.com/zh-cn/news/news260910/",
+          "sha256": "37e1d241031d0304d2add8b0c1cbeade1aea03f9a88fc63eaa044a58cdd77a85"
+        }
+      ]
+    }
+  ]
+}

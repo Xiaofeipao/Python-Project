@@ -1,0 +1,52 @@
+{
+  "status": "completed",
+  "metric": "accuracy",
+  "trials": 3,
+  "test_set_used_for_selection": false,
+  "partial": false,
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": null
+  },
+  "partial_model_path": "<RUN>\\partial\\v002\\model.joblib",
+  "partial_version": 2,
+  "partial_predictions": {
+    "rows": 30,
+    "output": "<RUN>\\partial\\v002\\predictions.csv"
+  },
+  "selected_trial": 2,
+  "selected_candidate": {
+    "family": "catboost",
+    "iterations": 600,
+    "depth": 6,
+    "learning_rate": 0.05,
+    "l2_leaf_reg": 3
+  },
+  "validation_score": 0.9333333333333333,
+  "model_path": "<RUN>\\model.joblib",
+  "final_test_score": null,
+  "prediction": {
+    "rows": 30,
+    "output": "<RUN>\\predictions.csv"
+  },
+  "model_usage": {
+    "evaluation_id": "development-data-172ee60587aa943d059330fb4d4fa850f03cf210d55929919433e26d3d2247dc",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0",
+    "call_count": 0,
+    "recorded_input_tokens": 0,
+    "recorded_output_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\34cdda213b1ce7a7c545cdd77c821875f603129e418c11155f6a169dae532df1\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "disabled",
+    "run_id": "1e514b23b4de4ac6b03d9f171f8c33ca",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "elapsed_seconds": 23.51600000000326
+}

@@ -169,7 +169,7 @@ class FormalRequirements(unittest.TestCase):
         history = [{"candidate": {"family": "dummy"}, "status": "success", "score": 0.5}]
         payload = {"model": self.model["model_id"],
                    "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
-                   "choices": [{"message": {"content": '{"choice": 0, "reason": "validation-driven experiment"}'}}]}
+                   "choices": [{"message": {"content": '{"choice": 0, "reason": "validation-driven experiment", "diagnosis": "Prior baseline establishes class frequencies", "next_action": "Compare the next candidate using validation only"}'}}]}
         with patch.dict(os.environ, {"SUPERAGENT_USAGE_ROOT": str(self.root / "shared")}):
             planner = AutonomousPlanner(config, output, "unit-fixture-task")
             with patch("superagent.llm_planner.build_opener") as mocked:

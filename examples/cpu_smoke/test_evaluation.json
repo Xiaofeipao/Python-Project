@@ -1,0 +1,65 @@
+{
+  "metric": "accuracy",
+  "score": 0.9333333333333333,
+  "rows": 30,
+  "model_sha256": "62ef7456a3a677835d0e923264f3c81eb223316d1b2f92d3ad3fbf1ee7d08a96",
+  "input_sha256": "d5e5a28d436d40c075e2314d7ba55ee7b82fcfc9ccbff4296d8ed67a2ff7f455",
+  "classification_report": {
+    "0": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 10.0
+    },
+    "1": {
+      "precision": 0.9,
+      "recall": 0.9,
+      "f1-score": 0.9,
+      "support": 10.0
+    },
+    "2": {
+      "precision": 0.9,
+      "recall": 0.9,
+      "f1-score": 0.9,
+      "support": 10.0
+    },
+    "accuracy": 0.9333333333333333,
+    "macro avg": {
+      "precision": 0.9333333333333332,
+      "recall": 0.9333333333333332,
+      "f1-score": 0.9333333333333332,
+      "support": 30.0
+    },
+    "weighted avg": {
+      "precision": 0.9333333333333333,
+      "recall": 0.9333333333333333,
+      "f1-score": 0.9333333333333333,
+      "support": 30.0
+    }
+  },
+  "source_sha256": "8c104e065043f7f829e580f9396ecc73e84de7ddfd17a16e62ca59aadf5399ec",
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": null
+  },
+  "model_usage": {
+    "evaluation_id": "development-data-172ee60587aa943d059330fb4d4fa850f03cf210d55929919433e26d3d2247dc",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0",
+    "call_count": 0,
+    "recorded_input_tokens": 0,
+    "recorded_output_tokens": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\34cdda213b1ce7a7c545cdd77c821875f603129e418c11155f6a169dae532df1\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "disabled",
+    "run_id": "1e514b23b4de4ac6b03d9f171f8c33ca",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "usage": "Final evaluation only; this score is not passed to search or selection"
+}

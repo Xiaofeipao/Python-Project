@@ -1,0 +1,10 @@
+{
+  "cpu_only": true,
+  "reload_predictions_match": true,
+  "runtime_sha256": "8c104e065043f7f829e580f9396ecc73e84de7ddfd17a16e62ca59aadf5399ec",
+  "rows": 30,
+  "correct": 28,
+  "test_accuracy": 0.9333333333333333,
+  "llm_calls": 0,
+  "logs_redacted": "Only absolute workspace/run paths replaced with placeholders; raw logs retained locally"
+}

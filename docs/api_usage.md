@@ -32,6 +32,17 @@ $env:NO_PROXY = (@($env:NO_PROXY, 'aigc-api.hkust-gz.edu.cn') | Where-Object { $
 
 ## 用于实验规划
 
+已提供 Flash 配置 `configs/model_registry.flash.json`。它采用官方 2026-09-10 生效的空闲时段价格：每百万 token 输入 1 元、输出 4 元；全部输入按缓存未命中计算。此为指定核算口径，不代表学校平台实际扣费。官方原图及 SHA-256 随配置保存。平台返回 `DeepSeek-V4.1-Flash`，具体修订号尚未独立确认。
+
+使用同一冻结版本运行两个任务并启用 API 规划：
+
+```powershell
+$credentialPath = Read-Host '本地 API 密钥文件路径'
+python scripts/run_released_batch.py --output runs/flash_run --max-trials 24 --llm-registry configs/model_registry.flash.json --key-file $credentialPath
+```
+
+每个任务共用持久化账本，限额 20 元。输出中的 `model_usage.json`、`task_model_calls.json` 和 `model_calls/` 记录实际 token（含返回的推理用量）、核算费用、请求与响应。密钥仅在进程环境中使用，不复制到输出。API 只负责实验规划，本地训练仍可使用 GPU。
+
 `configs/final_policy.llm.example.json` 提供接入参数示例。训练任务配置使用 `llm_mode: "required"`，并填写 `llm_model_id`、`llm_base_url`、`llm_api_key_env` 和 `llm_registry`（已有模型配置文件路径）。该示例中的模型配置目录目前为空，需完成模型配置后才能用于规划；连通性测试不依赖该目录。
 
 完整规划器从 `HKUST_API_KEY` 环境变量读取密钥，因此训练进程应在已设置此变量的会话中启动。规划器接收数据统计和验证反馈，从通用候选菜单中选择下一项实验；不会向接口发送测试集或执行任意生成代码。

@@ -3,16 +3,18 @@
 import hashlib
 import json
 import os
+import socket
 import time
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+from urllib.error import URLError
 
 from .io import append_json, event, write_json
 from .search import candidate_key, next_candidate
 from .submission import ROOT
-from .usage import BudgetExhausted, ModelCatalog, UsageLedger, UsageUncertain
+from .usage import BudgetExhausted, ModelCatalog, UsageLedger, UsageUncertain, amount, pricing_rows
 
 
 class NoRedirects(HTTPRedirectHandler):
@@ -33,12 +35,20 @@ def endpoint(base_url):
 def candidate_menu(profile, history, metric, limit=6):
     planning = list(history)
     menu = []
-    for _ in range(limit):
+    abandoned = set()
+    for family in {h['candidate']['family'] for h in history}:
+        recent = [h for h in history if h['candidate']['family'] == family][-2:]
+        if len(recent) == 2 and all(h['status'] in {'failed', 'timeout'} for h in recent):
+            abandoned.add(family)
+    for _ in range(limit * 8):
         candidate, reason = next_candidate(profile, planning, metric)
         if candidate is None:
             break
-        menu.append({"candidate": candidate, "reason": reason})
         planning.append({"candidate": candidate, "status": "not_executed"})
+        if candidate['family'] not in abandoned:
+            menu.append({"candidate": candidate, "reason": reason})
+        if len(menu) >= limit:
+            break
     return menu
 
 
@@ -54,6 +64,8 @@ def planning_context(profile, history, metric, menu):
                  "compute_profile": profile["compute_profile"]},
         "metric": metric,
         "previous_experiments": [{"candidate": record["candidate"], "status": record["status"],
+                                  "elapsed_seconds": record.get('elapsed_seconds'),
+                                  "failure_category": ('allocation' if 'out of memory' in record.get('error', '').lower() else record['status']) if record['status'] != 'success' else None,
                                   "validation_score": record.get("score")} for record in history],
         "menu": [{"choice": index, **item} for index, item in enumerate(menu)],
     }
@@ -98,15 +110,21 @@ class AutonomousPlanner:
         fallback, reason = next_candidate(profile, history, metric)
         if self.model is None or not history or fallback is None:
             return fallback, reason
+        rates = pricing_rows(self.model)
+        reserve = (max(amount(r['input_rmb_per_million']) for r in rates) +
+                   max(amount(r['output_rmb_per_million']) for r in rates)) * self.model['context_window_tokens'] / 1_000_000
+        if amount(self.ledger.summary()['actual_recorded_cost_rmb']) + reserve > amount(self.config.max_cost_rmb):
+            event(self.output, 'search_stopped', reason='Configured cost ceiling cannot cover another worst-case call')
+            return None, 'Cost ceiling reached; preserve final-fit time'
         menu = candidate_menu(profile, history, metric)
         if not menu:
-            return fallback, reason
+            return None, 'Remaining candidate families were abandoned after repeated failures'
         context = planning_context(profile, history, metric, menu)
         body = {
             "model": self.model["model_id"], "stream": False,
             "max_tokens": self.config.llm_max_output_tokens,
             "messages": [
-                {"role": "system", "content": "Plan general classification experiments using only the data statistics and validation feedback. Choose exactly one candidate from the menu. Return JSON only: {\"choice\": integer, \"reason\": string}. Never use task or dataset identity, test data, external tools, or executable code."},
+                {"role": "system", "content": "Use the trial history and validation feedback to diagnose successes/failures and choose one menu experiment. Return JSON only: {\"choice\": integer, \"diagnosis\": string, \"next_action\": string, \"abandoned_strategy\": string, \"reason\": string}. Explain why the next experiment addresses observed evidence; mention switches after repeated failures. Do not invent results. Never use test data, task identity, external tools or executable code. Do not change the assigned metric."},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False, allow_nan=False)},
             ],
         }
@@ -159,6 +177,9 @@ class AutonomousPlanner:
             try:
                 content = parsed["choices"][0]["message"]["content"]
                 selection = json.loads(content)
+                if any(not isinstance(selection.get(k), str) or not selection[k].strip()
+                       for k in ('diagnosis', 'next_action')):
+                    raise ValueError('Planning requires structured diagnosis and next_action')
                 choice = selection["choice"]
                 if type(choice) is not int or not 0 <= choice < len(menu):
                     raise ValueError("Model choice is not a menu index")
@@ -169,11 +190,17 @@ class AutonomousPlanner:
             except (ValueError, TypeError, KeyError, IndexError):
                 event(self.output, "llm_invalid_plan", call_id=call["call_id"], fallback=fallback)
                 return fallback, reason
-            event(self.output, "llm_plan_selected", call_id=call["call_id"], candidate=proposed, explanation=explanation)
+            event(self.output, "llm_plan_selected", call_id=call["call_id"], candidate=proposed, explanation=explanation,
+                  diagnosis=selection.get('diagnosis', explanation), next_action=selection.get('next_action', explanation),
+                  abandoned_strategy=selection.get('abandoned_strategy', ''),
+                  based_on_trials=len(history), observed_metric=metric)
             return proposed, f"LLM menu selection ({call['call_id']}): {explanation}"
         except BaseException as exc:
             if not recorded:
-                record = self.ledger.finish(call["call_id"], self.model, error=type(exc).__name__)
+                dns_not_sent = isinstance(exc, URLError) and isinstance(exc.reason, socket.gaierror)
+                record = self.ledger.finish(call["call_id"], self.model,
+                                            error='DNSResolutionError' if dns_not_sent else type(exc).__name__,
+                                            dns_not_sent=dns_not_sent)
                 append_json(self.output / "model_calls.jsonl", record)
             # Do not retry ambiguous calls or silently continue a reportable run.
             raise

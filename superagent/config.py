@@ -25,7 +25,7 @@ class TaskConfig:
     metric: str = "f1_macro"
     positive_label: str | None = None
     validation_fraction: float = 0.2
-    max_trials: int = 16
+    max_trials: int = 40
     time_budget_seconds: float = 1800
     trial_timeout_seconds: float = 300
     final_fit_reserve_fraction: float = 0.3
@@ -51,6 +51,8 @@ class TaskConfig:
     llm_max_output_tokens: int = 512
     llm_timeout_seconds: float = 60
     llm_budget_rmb: str = "20"
+    progressive_output: bool = True
+    max_cost_rmb: str = '15'
 
     @classmethod
     def load(cls, path):
@@ -75,6 +77,11 @@ class TaskConfig:
         return config
 
     def validate(self):
+        from .usage import amount
+        if not 0 < amount(self.max_cost_rmb) <= amount(self.llm_budget_rmb):
+            raise ValueError('max_cost_rmb must be positive and within the model usage budget')
+        if type(self.progressive_output) is not bool:
+            raise ValueError('progressive_output must be boolean')
         from .usage import amount
 
         if self.evaluation_stage not in {"development", "released", "unseen"}:

@@ -104,7 +104,8 @@ def train_agent(config, output):
     output.mkdir(parents=True, exist_ok=False)
     history = []
     planner = None
-    summary = {"status": "running", "metric": config.metric, "trials": 0}
+    summary = {"status": "running", "metric": config.metric, "trials": 0,
+               "test_set_used_for_selection": False, "partial": True}
     event(output, "run_started", config=config.to_dict())
     try:
         config.validate()
@@ -125,21 +126,25 @@ def train_agent(config, output):
         profile["torch_available"] = config.enable_torch and "version" in env["torch"]
         cuda_enabled = profile["torch_available"] and env["torch"].get("cuda_available") and config.device != "cpu"
         if config.compute_profile == "gpu_large" and not cuda_enabled:
-            raise ValueError("gpu_large requires enabled PyTorch and an available CUDA device")
+            event(output, 'hardware_fallback', reason='CUDA unavailable; use CPU search')
+            config.compute_profile = 'auto'
+            config.device = 'auto'
         profile["compute_profile"] = ("gpu_large" if cuda_enabled else "standard") if config.compute_profile == "auto" else config.compute_profile
         if profile["data_type"] == "image":
             hashes["images"] = image_hashes([train, validation], profile["image_column"], config.image_root)
         write_json(output / "profile.json", profile)
         manifest = {"config": config.to_dict(), "source_sha256": source_hash,
                     "data_sha256": hashes, "split": split,
-                    "test_data_read_during_training": False,
-                    "test_access_policy": "Formal test inference only after final solution selection; never used by search",
+                    "test_data_read_during_training": bool(config.test_csv and config.progressive_output),
+                    "test_access_policy": "Partial feature-only inference may follow checkpoint selection; test labels/scores never enter search. Final inference follows final selection.",
                     "submission": submission, "model_usage": "model_usage.json",
                     "resource_accounting": "wall-clock, configured threads, CUDA training memory and official-standard-price LLM token costs"}
         write_json(output / "manifest.json", manifest)
         cache = output / "_split.joblib"
         joblib.dump({"train": train, "validation": validation}, cache)
         event(output, "data_analyzed", profile=profile)
+        event(output, 'modality_inferred', requested=config.data_type, inferred=profile['data_type'],
+              evidence=profile.get('modality_evidence', 'Explicit task configuration'))
         base_request = {"config": config.to_dict(), "profile": profile, "data_path": str(cache),
                         "code_root": str(output / "source_snapshot"),
                         "feature_cache": str(output / "preprocessing_cache") if config.cache_preprocessing else None}
@@ -164,6 +169,30 @@ def train_agent(config, output):
             history.append(record)
             append_json(output / "trials.jsonl", record)
             event(output, "trial_finished", **record)
+            previous = [h for h in history[:-1] if h['status'] == 'success']
+            if (config.progressive_output and record['status'] == 'success' and
+                (not previous or utility(record['score'], config.metric) > max(utility(h['score'], config.metric) for h in previous))):
+                checkpoint = output / 'partial' / f'v{trial_number:03d}'
+                partial_metadata = {'schema_version': 1, 'config': config.to_dict(), 'profile': profile,
+                    'candidate': candidate, 'source_sha256': source_hash, 'submission': submission,
+                    'partial': True, 'validation_score': record['score'], 'model_usage': planner.export_usage()}
+                event(output, 'partial_selection_completed', trial=trial_number, candidate=candidate)
+                allowance = min(config.trial_timeout_seconds, max(0, search_deadline-time.monotonic()) * .2)
+                if allowance > 1:
+                    result = run_worker(dict(base_request, candidate=candidate, mode='final',
+                        metadata=partial_metadata, model_path=str(checkpoint / 'model.joblib')),
+                        checkpoint, allowance, config.threads)
+                    if result['status'] == 'success':
+                        summary['partial_model_path'] = str(checkpoint / 'model.joblib')
+                        summary['partial_version'] = trial_number
+                        if config.test_csv:
+                            from .prediction import predict
+                            event(output, 'partial_test_read_started', version=trial_number)
+                            summary['partial_predictions'] = predict(checkpoint / 'model.joblib', config.test_csv,
+                                                                     checkpoint / 'predictions.csv')
+                        write_json(checkpoint / 'summary.json', dict(summary, status='partial'))
+                        write_json(output / 'summary.json', summary)
+                    event(output, 'partial_checkpoint_finished', version=trial_number, **result)
         successful = [h for h in history if h["status"] == "success"]
         successful.sort(key=lambda h: utility(h["score"], config.metric), reverse=True)
         if not successful:
@@ -199,13 +228,16 @@ def train_agent(config, output):
                     abandoned.unlink()
         if selected is None:
             raise RuntimeError("Final refit failed or time budget expired; validation records remain available")
+        event(output, 'selection_completed', trial=selected['trial'], candidate=selected['candidate'])
         summary.update(status="completed", selected_trial=selected["trial"],
+                       partial=False,
                        selected_candidate=selected["candidate"], validation_score=selected["score"],
                        model_path=str(output / "model.joblib"), final_test_score=None)
-        if config.evaluation_stage != "development" and config.test_csv:
+        if config.test_csv:
             from .prediction import predict
 
             event(output, "final_prediction_started", model_path=str(output / "model.joblib"))
+            event(output, 'test_read_started', phase='final')
             summary["prediction"] = predict(output / "model.joblib", config.test_csv, output / "predictions.csv")
             event(output, "final_prediction_finished", prediction=summary["prediction"])
         return summary
