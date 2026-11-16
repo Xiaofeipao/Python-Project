@@ -1,6 +1,6 @@
 {
-  "max_trials": 40,
-  "time_budget_seconds": 1800,
+  "max_trials": 10,
+  "time_budget_seconds": 7200,
   "trial_timeout_seconds": 300,
   "final_fit_reserve_fraction": 0.3,
   "validation_fraction": 0.2,

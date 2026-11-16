@@ -25,7 +25,7 @@ class TaskConfig:
     metric: str = "f1_macro"
     positive_label: str | None = None
     validation_fraction: float = 0.2
-    max_trials: int = 40
+    max_trials: int = 10
     time_budget_seconds: float = 1800
     trial_timeout_seconds: float = 300
     final_fit_reserve_fraction: float = 0.3

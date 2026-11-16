@@ -1,0 +1,76 @@
+{
+  "status": "incomplete_api_read_timeout",
+  "max_trials": 10,
+  "tasks": {
+    "coupon": {
+      "completed_trials": 9,
+      "successful_trials": 9,
+      "best_validation_accuracy": 0.7596059113300493,
+      "best_candidate": {
+        "family": "cross_boost_blend",
+        "gpu_seeds": 3,
+        "gpu_weight": 0.25,
+        "leaf_weight": 0.0
+      },
+      "preserved_partial_model": "runs\\flash_10trials_20261116\\coupon\\agent\\partial\\v004\\model.joblib",
+      "model_sha256": "c502edb4629fa163b689e23d38f083c229166bf8fa11c1ef2529116b41f49a37",
+      "best_validation_after_2": 0.758128078817734,
+      "best_validation_after_8": 0.7596059113300493,
+      "model_usage": {
+        "evaluation_id": "released-coupon",
+        "budget_rmb": "20",
+        "actual_recorded_cost_rmb": "0.057425",
+        "unreconciled_reserved_rmb": "5.24288",
+        "actual_total_cost_rmb": null,
+        "call_count": 16,
+        "recorded_input_tokens": 13521,
+        "recorded_output_tokens": 10976,
+        "input_tokens": null,
+        "output_tokens": null,
+        "accounting_complete": false,
+        "within_budget": true,
+        "ledger_path": "<PROJECT>\\.model_usage\\7c66d6bb9fe19efa363958349251efbe4ac774703fba9a05be6d96b0f250b4e2\\ledger.json",
+        "requires_all_agents_to_share_ledger": true,
+        "llm_mode": "required",
+        "run_id": "f083b98981af43599769f11efcddddbc",
+        "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+      }
+    },
+    "headlines": {
+      "completed_trials": 4,
+      "successful_trials": 4,
+      "best_validation_accuracy": 0.6904255319148936,
+      "best_candidate": {
+        "family": "logistic",
+        "C": 1.0,
+        "analyzer": "char",
+        "representation": "separate",
+        "class_weight": "balanced"
+      },
+      "preserved_partial_model": "runs\\flash_10trials_20261116\\headlines\\agent\\partial\\v002\\model.joblib",
+      "model_sha256": "abd38ab9827847c682ce2a7cacaec26f4f1f7ec421550182e0a1cb45a39727d2",
+      "best_validation_after_2": 0.6904255319148936,
+      "best_validation_after_8": null,
+      "model_usage": {
+        "evaluation_id": "released-headlines",
+        "budget_rmb": "20",
+        "actual_recorded_cost_rmb": "0.013465",
+        "unreconciled_reserved_rmb": "5.24288",
+        "actual_total_cost_rmb": null,
+        "call_count": 6,
+        "recorded_input_tokens": 2869,
+        "recorded_output_tokens": 2649,
+        "input_tokens": null,
+        "output_tokens": null,
+        "accounting_complete": false,
+        "within_budget": true,
+        "ledger_path": "<PROJECT>\\.model_usage\\cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d\\ledger.json",
+        "requires_all_agents_to_share_ledger": true,
+        "llm_mode": "required",
+        "run_id": "f95c61050f9044a59308f030ea79621e",
+        "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+      }
+    }
+  },
+  "note": "Unknown usage retained, no retries and no fabricated final/test results. Best checkpoints are partial development artifacts."
+}

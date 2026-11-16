@@ -1,0 +1,36 @@
+{
+  "status": "failed",
+  "metric": "accuracy",
+  "trials": 4,
+  "test_set_used_for_selection": false,
+  "partial": true,
+  "submission": {
+    "evaluation_stage": "released",
+    "evaluation_id": "released-headlines",
+    "frozen_runtime_sha256": "e302616af55cdf9e143705ffb0dbd3b32735118c952e7dd5de4f20fab1cff665",
+    "frozen_manifest_sha256": "8fc90eff538757dbe23176a101d30327cfa4551e3ec48f9d26b860042514d6f7"
+  },
+  "partial_model_path": "<PROJECT>\\runs\\flash_10trials_20261116\\headlines\\agent\\partial\\v002\\model.joblib",
+  "partial_version": 2,
+  "error": "The read operation timed out",
+  "model_usage": {
+    "evaluation_id": "released-headlines",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.013465",
+    "unreconciled_reserved_rmb": "5.24288",
+    "actual_total_cost_rmb": null,
+    "call_count": 6,
+    "recorded_input_tokens": 2869,
+    "recorded_output_tokens": 2649,
+    "input_tokens": null,
+    "output_tokens": null,
+    "accounting_complete": false,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "f95c61050f9044a59308f030ea79621e",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "elapsed_seconds": 310.25
+}

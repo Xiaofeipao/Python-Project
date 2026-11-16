@@ -24,15 +24,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'runs/released_gpu_batch_20261111')
     parser.add_argument('--tasks', nargs='+', choices=['coupon', 'headlines'], default=['coupon', 'headlines'])
-    parser.add_argument('--max-trials', type=int, default=40)
+    parser.add_argument('--max-trials', type=int, default=10)
     parser.add_argument('--llm-registry', type=Path, help='Enable API planning using this model registry')
     parser.add_argument('--llm-model', default='DeepSeek-V4.1-Flash')
     parser.add_argument('--key-file', type=Path, help='Read credentials locally; never copied to outputs')
+    parser.add_argument('--time-budget', type=float, default=7200)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     os.environ['SUPERAGENT_USAGE_ROOT'] = str(ROOT / '.model_usage')
-    policy = {'max_trials': args.max_trials, 'time_budget_seconds': 2400, 'trial_timeout_seconds': 600,
+    policy = {'max_trials': args.max_trials, 'time_budget_seconds': args.time_budget, 'trial_timeout_seconds': 600,
               'threads': 4, 'device': 'auto', 'compute_profile': 'auto', 'llm_mode': 'disabled'}
     if args.llm_registry:
         if args.key_file:

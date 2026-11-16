@@ -88,7 +88,7 @@ python main.py evaluate --model runs/task_01/model.joblib --input data/test.csv 
 已提供任务数据时，可自动使用同一冻结版本运行两项 Released Tasks：
 
 ```bash
-python scripts/run_released_batch.py --output runs/unified_run --max-trials 40
+python scripts/run_released_batch.py --output runs/unified_run --max-trials 10
 ```
 
 脚本读取项目根目录下的 `in_vehicle_coupon_recommendation/` 和 `Released_Task2-Headlines_CTR/`，依次完成训练、预测与最终评估。NumPy 数据转换保持原始划分和行顺序；测试数据只在该任务选型、重训后读取。数据和运行产物不包含在 Git 仓库中，输出目录必须不存在。
@@ -106,7 +106,7 @@ python -m unittest discover -s tests -v
 - Execution / Reproducibility（10%）：冻结源码、输入哈希、调用账本、`summary.json` 和 `tests/test_resilience.py`。设备自动选择；分配失败时减小 batch，再尝试 CPU；无法恢复的异常保留诊断。
 - Presentation（30%）：运行 `python scripts/decision_timeline.py <events.jsonl路径> --output Timeline.md` 提取真实决策时间线，不补写不存在的反思，不擅自改变课程指定指标。
 
-默认最多 40 次实验，同时受时间和费用限制；`max_cost_rmb` 默认 15 元，下一次最坏情况调用无法容纳时停止搜索，任务累计总额仍不超过 20 元。正式策略 `configs/final_policy.json` 启用 Flash API，密钥按 API 使用说明通过环境变量提供；开发测试可显式关闭 API。
+默认最多 10 次实验，同时受时间和费用限制；`max_cost_rmb` 默认 15 元，下一次最坏情况调用无法容纳时停止搜索，任务累计总额仍不超过 20 元。正式策略 `configs/final_policy.json` 启用 Flash API，密钥按 API 使用说明通过环境变量提供；开发测试可显式关闭 API。
 
 `test_set_used_for_selection: false` 表示测试标签与成绩不进入搜索。开启 `progressive_output` 时，部分模型固定后可提前预测测试特征；日志明确标记 `partial_test_read_started`。最终模型的 `selection_completed` 先于最终 `test_read_started`，单元测试断言该顺序。若要求整个搜索结束前完全不读取测试文件，请设置 `progressive_output: false`，仍可保留最终产出流程。
 
