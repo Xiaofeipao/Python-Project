@@ -1,0 +1,36 @@
+{
+  "status": "passed",
+  "runtime_sha256": "698d3e4dbec6a68f837f1ae19fec888ecd3886ac54a5af3ee08c7fe29c861022",
+  "same_frozen_runtime_and_policy": true,
+  "purpose": "Short development run: 2 candidates per task; reused tests, not independent final evaluation",
+  "tasks": {
+    "coupon": {
+      "accuracy": 0.7922743397713835,
+      "correct": 2010,
+      "rows": 2537,
+      "selected_candidate": {
+        "family": "cross_boost_blend"
+      },
+      "this_run_api_calls": 1,
+      "this_run_cost_rmb": "0.002521",
+      "cumulative_cost_rmb": "0.018892",
+      "reload_matches": true
+    },
+    "headlines": {
+      "accuracy": 0.6605816831683168,
+      "correct": 2135,
+      "rows": 3232,
+      "selected_candidate": {
+        "family": "logistic",
+        "C": 1.0,
+        "analyzer": "char",
+        "representation": "separate",
+        "class_weight": "balanced"
+      },
+      "this_run_api_calls": 1,
+      "this_run_cost_rmb": "0.002649",
+      "cumulative_cost_rmb": "0.002649",
+      "reload_matches": true
+    }
+  }
+}

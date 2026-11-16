@@ -1,0 +1,46 @@
+{
+  "status": "completed",
+  "metric": "accuracy",
+  "trials": 2,
+  "test_set_used_for_selection": false,
+  "partial": false,
+  "submission": {
+    "evaluation_stage": "released",
+    "evaluation_id": "released-headlines",
+    "frozen_runtime_sha256": "698d3e4dbec6a68f837f1ae19fec888ecd3886ac54a5af3ee08c7fe29c861022",
+    "frozen_manifest_sha256": "05eea249d5f0f9db24265b1e98416b563c184ad430e0e4bb430e2822a5165352"
+  },
+  "partial_model_path": "<RUN>\\headlines\\agent\\partial\\v002\\model.joblib",
+  "partial_version": 2,
+  "selected_trial": 2,
+  "selected_candidate": {
+    "family": "logistic",
+    "C": 1.0,
+    "analyzer": "char",
+    "representation": "separate",
+    "class_weight": "balanced"
+  },
+  "validation_score": 0.6904255319148936,
+  "model_path": "<RUN>\\headlines\\agent\\model.joblib",
+  "final_test_score": null,
+  "model_usage": {
+    "evaluation_id": "released-headlines",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.002649",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0.002649",
+    "call_count": 2,
+    "recorded_input_tokens": 661,
+    "recorded_output_tokens": 497,
+    "input_tokens": 661,
+    "output_tokens": 497,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "63b87e0e1f8a4f459dc36d06b8ff1ceb",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "elapsed_seconds": 105.67200000000003
+}

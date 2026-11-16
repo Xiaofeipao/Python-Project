@@ -1,0 +1,42 @@
+{
+  "status": "completed",
+  "metric": "accuracy",
+  "trials": 2,
+  "test_set_used_for_selection": false,
+  "partial": false,
+  "submission": {
+    "evaluation_stage": "released",
+    "evaluation_id": "released-coupon",
+    "frozen_runtime_sha256": "698d3e4dbec6a68f837f1ae19fec888ecd3886ac54a5af3ee08c7fe29c861022",
+    "frozen_manifest_sha256": "05eea249d5f0f9db24265b1e98416b563c184ad430e0e4bb430e2822a5165352"
+  },
+  "partial_model_path": "<RUN>\\coupon\\agent\\partial\\v001\\model.joblib",
+  "partial_version": 1,
+  "selected_trial": 2,
+  "selected_candidate": {
+    "family": "cross_boost_blend"
+  },
+  "validation_score": 0.758128078817734,
+  "model_path": "<RUN>\\coupon\\agent\\model.joblib",
+  "final_test_score": null,
+  "model_usage": {
+    "evaluation_id": "released-coupon",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.018892",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0.018892",
+    "call_count": 7,
+    "recorded_input_tokens": 5612,
+    "recorded_output_tokens": 3320,
+    "input_tokens": 5612,
+    "output_tokens": 3320,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\7c66d6bb9fe19efa363958349251efbe4ac774703fba9a05be6d96b0f250b4e2\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "28a11289eb5645359d9914b39812b4c1",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "elapsed_seconds": 756.2340000000002
+}

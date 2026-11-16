@@ -1,0 +1,61 @@
+{
+  "metric": "accuracy",
+  "score": 0.6605816831683168,
+  "rows": 3232,
+  "model_sha256": "e266fa17a4f7c183563fd6a74d206ce8edd7a971d62ba9ced1c7496b96a049ed",
+  "input_sha256": "d3a4e3977803861d60127b919babc77e07aa6fe3ffb06020c57f7ab1828ac300",
+  "classification_report": {
+    "0": {
+      "precision": 0.6743295019157088,
+      "recall": 0.642726719415703,
+      "f1-score": 0.6581489560610783,
+      "support": 1643.0
+    },
+    "1": {
+      "precision": 0.6476590636254502,
+      "recall": 0.6790434235368156,
+      "f1-score": 0.6629800307219662,
+      "support": 1589.0
+    },
+    "accuracy": 0.6605816831683168,
+    "macro avg": {
+      "precision": 0.6609942827705795,
+      "recall": 0.6608850714762593,
+      "f1-score": 0.6605644933915222,
+      "support": 3232.0
+    },
+    "weighted avg": {
+      "precision": 0.6612170865558015,
+      "recall": 0.6605816831683168,
+      "f1-score": 0.6605241347851348,
+      "support": 3232.0
+    }
+  },
+  "source_sha256": "698d3e4dbec6a68f837f1ae19fec888ecd3886ac54a5af3ee08c7fe29c861022",
+  "submission": {
+    "evaluation_stage": "released",
+    "evaluation_id": "released-headlines",
+    "frozen_runtime_sha256": "698d3e4dbec6a68f837f1ae19fec888ecd3886ac54a5af3ee08c7fe29c861022",
+    "frozen_manifest_sha256": "05eea249d5f0f9db24265b1e98416b563c184ad430e0e4bb430e2822a5165352"
+  },
+  "model_usage": {
+    "evaluation_id": "released-headlines",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.002649",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0.002649",
+    "call_count": 2,
+    "recorded_input_tokens": 661,
+    "recorded_output_tokens": 497,
+    "input_tokens": 661,
+    "output_tokens": 497,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "63b87e0e1f8a4f459dc36d06b8ff1ceb",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "usage": "Final evaluation only; this score is not passed to search or selection"
+}
