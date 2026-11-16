@@ -18,5 +18,6 @@
   "llm_registry": "model_registry.json",
   "llm_model_id": "DeepSeek-V4.1-Flash",
   "llm_base_url": "https://aigc-api.hkust-gz.edu.cn/api/v2",
-  "llm_max_output_tokens": 2048
+  "llm_max_output_tokens": 2048,
+  "progressive_output": false
 }

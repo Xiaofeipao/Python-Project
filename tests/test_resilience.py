@@ -21,6 +21,29 @@ class AllocationFailure(BaseEstimator):
 
 
 class ResilienceTests(unittest.TestCase):
+    def test_strict_default_never_predicts_before_final_selection(self):
+        from unittest.mock import patch
+        import superagent.prediction as prediction
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for name, offset in [('train', 0), ('val', 20), ('test', 40)]:
+                pd.DataFrame({'id': range(offset, offset+10), 'x': range(10),
+                              'label': ['a', 'b']*5}).to_csv(root/f'{name}.csv', index=False)
+            original = prediction.checked_input
+            observed = []
+            def guarded(path, metadata):
+                events = [json.loads(s) for s in (root/'run/events.jsonl').read_text().splitlines()]
+                self.assertIn('selection_completed', [e['event'] for e in events])
+                self.assertNotIn('partial_test_read_started', [e['event'] for e in events])
+                observed.append(str(path))
+                return original(path, metadata)
+            with patch.object(prediction, 'checked_input', side_effect=guarded):
+                train_agent(TaskConfig(train_csv=str(root/'train.csv'), validation_csv=str(root/'val.csv'),
+                    test_csv=str(root/'test.csv'), target_column='label', id_column='id',
+                    enable_torch=False, device='cpu', max_trials=1, time_budget_seconds=300), root/'run')
+            self.assertEqual(len(observed), 1)
+            self.assertFalse((root/'run/partial').exists())
+
     def test_oom_reduces_batch_then_uses_cpu(self):
         model, steps = fit_with_fallback(AllocationFailure(), [[1]], [0])
         self.assertEqual(model.device, 'cpu')
@@ -34,7 +57,7 @@ class ResilienceTests(unittest.TestCase):
                               'label': ['a', 'b']*5}).to_csv(root/f'{name}.csv', index=False)
             result = train_agent(TaskConfig(train_csv=str(root/'train.csv'), validation_csv=str(root/'val.csv'),
                 test_csv=str(root/'test.csv'), target_column='label', id_column='id', device='cpu',
-                enable_torch=False, max_trials=1, time_budget_seconds=300), root/'run')
+                enable_torch=False, progressive_output=True, max_trials=1, time_budget_seconds=300), root/'run')
             self.assertFalse(result['test_set_used_for_selection'])
             self.assertTrue((root/'run/partial/v001/predictions.csv').exists())
             events = [json.loads(s) for s in (root/'run/events.jsonl').read_text().splitlines()]

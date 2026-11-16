@@ -51,7 +51,7 @@ class TaskConfig:
     llm_max_output_tokens: int = 512
     llm_timeout_seconds: float = 60
     llm_budget_rmb: str = "20"
-    progressive_output: bool = True
+    progressive_output: bool = False
     max_cost_rmb: str = '15'
 
     @classmethod

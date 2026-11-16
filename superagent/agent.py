@@ -169,6 +169,16 @@ def train_agent(config, output):
             history.append(record)
             append_json(output / "trials.jsonl", record)
             event(output, "trial_finished", **record)
+            earlier = [h for h in history[:-1] if h['status'] == 'success']
+            before = max((utility(h['score'], config.metric) for h in earlier), default=None)
+            after = max((utility(h['score'], config.metric) for h in history if h['status'] == 'success'), default=None)
+            event(output, 'feedback_assessed', trial=trial_number, candidate=candidate,
+                  metric=config.metric, status=record['status'], validation_score=record.get('score'),
+                  best_utility_before=before, best_utility_after=after,
+                  utility_gain=None if before is None or after is None else after-before,
+                  outcome='failed' if record['status'] != 'success' else
+                          ('new_best' if before is None or after > before else 'no_improvement'),
+                  evidence_source='trials.jsonl; validation only')
             previous = [h for h in history[:-1] if h['status'] == 'success']
             if (config.progressive_output and record['status'] == 'success' and
                 (not previous or utility(record['score'], config.metric) > max(utility(h['score'], config.metric) for h in previous))):

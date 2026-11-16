@@ -13,5 +13,6 @@
   "llm_agent_id": "planner",
   "llm_max_output_tokens": 512,
   "llm_timeout_seconds": 60,
-  "llm_budget_rmb": "20"
+  "llm_budget_rmb": "20",
+  "progressive_output": false
 }

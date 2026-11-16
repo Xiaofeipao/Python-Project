@@ -34,7 +34,8 @@ def main():
     output.mkdir(parents=True, exist_ok=False)
     os.environ['SUPERAGENT_USAGE_ROOT'] = str(ROOT / '.model_usage')
     policy = {'max_trials': args.max_trials, 'time_budget_seconds': args.time_budget, 'trial_timeout_seconds': 600,
-              'threads': 4, 'device': 'auto', 'compute_profile': 'auto', 'llm_mode': 'disabled'}
+              'threads': 4, 'device': 'auto', 'compute_profile': 'auto', 'llm_mode': 'disabled',
+              'progressive_output': False}
     if args.llm_registry:
         if args.key_file:
             os.environ['HKUST_API_KEY'] = args.key_file.read_text(encoding='utf-8-sig').strip()

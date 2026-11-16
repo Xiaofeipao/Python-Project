@@ -9,9 +9,9 @@ def render(source):
     for line in Path(source).read_text(encoding='utf-8').splitlines():
         item = json.loads(line)
         if item['event'] in {'data_analyzed', 'modality_inferred', 'llm_plan_selected', 'trial_finished',
-                              'partial_checkpoint_finished', 'selection_completed', 'test_read_started', 'run_finished'}:
+                              'feedback_assessed', 'partial_checkpoint_finished', 'selection_completed', 'test_read_started', 'run_finished'}:
             fields = {k: item[k] for k in ('candidate', 'score', 'diagnosis', 'next_action', 'abandoned_strategy',
-                       'status', 'inferred') if k in item}
+                       'status', 'inferred', 'outcome', 'utility_gain', 'validation_score') if k in item}
             rows.append(f"- {item['timestamp_utc']} **{item['event']}**: {json.dumps(fields, ensure_ascii=False)}")
     return '\n'.join(rows) + '\n'
 
