@@ -53,6 +53,7 @@ class TaskConfig:
     llm_budget_rmb: str = "20"
     progressive_output: bool = False
     max_cost_rmb: str = '15'
+    allow_provisional_accounting: bool = False
 
     @classmethod
     def load(cls, path):
@@ -77,6 +78,8 @@ class TaskConfig:
         return config
 
     def validate(self):
+        if type(self.allow_provisional_accounting) is not bool or (self.allow_provisional_accounting and self.evaluation_stage != 'development'):
+            raise ValueError('Provisional accounting is permitted only for explicitly marked development runs')
         from .usage import amount
         if not 0 < amount(self.max_cost_rmb) <= amount(self.llm_budget_rmb):
             raise ValueError('max_cost_rmb must be positive and within the model usage budget')

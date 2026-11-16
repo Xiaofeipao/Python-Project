@@ -1,0 +1,43 @@
+{
+  "status": "completed",
+  "metric": "accuracy",
+  "trials": 10,
+  "test_set_used_for_selection": false,
+  "partial": false,
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": "released-coupon"
+  },
+  "selected_trial": 3,
+  "selected_candidate": {
+    "family": "cross_boost_blend",
+    "gpu_seeds": 3,
+    "gpu_weight": 0.25,
+    "leaf_weight": 0.0
+  },
+  "validation_score": 0.7596059113300493,
+  "model_path": "<PROJECT>\\runs\\pro_tasks_20261116\\coupon\\agent\\model.joblib",
+  "final_test_score": null,
+  "model_usage": {
+    "evaluation_id": "released-coupon",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.3014195",
+    "unreconciled_reserved_rmb": "5.24288",
+    "actual_total_cost_rmb": null,
+    "call_count": 25,
+    "recorded_input_tokens": 23210,
+    "recorded_output_tokens": 25820,
+    "input_tokens": null,
+    "output_tokens": null,
+    "accounting_complete": false,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\7c66d6bb9fe19efa363958349251efbe4ac774703fba9a05be6d96b0f250b4e2\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "e34ca81e6ea94e4a9fec8d9aeabeb4be",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "accounting_provisional": true,
+  "eligible_for_formal_submission": false,
+  "elapsed_seconds": 1183.375
+}

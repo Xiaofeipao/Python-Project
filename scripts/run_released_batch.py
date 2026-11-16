@@ -29,6 +29,7 @@ def main():
     parser.add_argument('--llm-model', default='DeepSeek-V4.1-Flash')
     parser.add_argument('--key-file', type=Path, help='Read credentials locally; never copied to outputs')
     parser.add_argument('--time-budget', type=float, default=7200)
+    parser.add_argument('--provisional-accounting', action='store_true')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -41,7 +42,9 @@ def main():
             os.environ['HKUST_API_KEY'] = args.key_file.read_text(encoding='utf-8-sig').strip()
         policy.update(llm_mode='required', llm_registry=str(args.llm_registry.resolve()),
                       llm_model_id=args.llm_model, llm_base_url='https://aigc-api.hkust-gz.edu.cn/api/v2',
-                      llm_max_output_tokens=2048, llm_timeout_seconds=60, llm_budget_rmb='20')
+                      llm_max_output_tokens=2048, llm_timeout_seconds=180, llm_budget_rmb='20')
+    if args.provisional_accounting:
+        policy.update(allow_provisional_accounting=True, max_cost_rmb='20')
     (output / 'policy.json').write_text(json.dumps(policy, indent=2), encoding='utf-8')
     frozen = invoke(output, ROOT / 'main.py', 'freeze', '--policy', output / 'policy.json',
                     '--output', output / 'frozen_agent')
@@ -66,8 +69,8 @@ def main():
             data.mkdir()
             for split in ('train', 'val'):
                 convert_split(source, split, data / f'{split}.csv')
-        config = {**fields, 'train_csv': str(data / train), 'validation_csv': str(data / val),
-                  'metric': 'accuracy', 'evaluation_stage': 'released',
+        config = {**(policy if args.provisional_accounting else {}), **fields, 'train_csv': str(data / train), 'validation_csv': str(data / val),
+                  'metric': 'accuracy', 'evaluation_stage': 'development' if args.provisional_accounting else 'released',
                   'evaluation_id': f'released-{name}', 'frozen_manifest': frozen['manifest']}
         path = folder / 'task.json'
         path.write_text(json.dumps(config, indent=2), encoding='utf-8')

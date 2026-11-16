@@ -1,5 +1,17 @@
 # API 使用方法
 
+## Pro 开发实验
+
+`configs/model_registry.pro.json` 使用 DeepSeek-V4-Pro，按官方 2026-08-17 生效的空闲价格核算：输入（缓存未命中）4.5 元/百万 token、输出 13.5 元/百万 token。价格原图和官方输出上限说明随注册表保存并校验哈希；学校接口返回的具体部署修订号仍未独立确认。
+
+```powershell
+python scripts/run_released_batch.py --output runs/pro_experiment --max-trials 10 --llm-registry configs/model_registry.pro.json --llm-model DeepSeek-V4-Pro --key-file $credentialPath --provisional-accounting
+```
+
+`--provisional-accounting` 仅允许开发阶段使用：历史超时仍保持未知，完整预留其最坏费用；预算按“已知费用 + 未知预留 + 下一次最坏预留”控制，不另开任务账本、不把未知值置零。模型的官方输出上限用于保守预留，实际费用仍只按真实 token 计算。若再发生网络超时，不重试该请求，后续可在预算允许时继续或退回本地规划。
+
+这类实验的 `summary.json` 会标记 `accounting_provisional: true`、`eligible_for_formal_submission: false`，累计实际费用保持 `null`。结果只能作为开发实验；正式 released/unseen 模式禁止该选项，仍要求核清每次实际用量。测试文件仍只在最终选型后读取。
+
 ## 学校接口
 
 - Base URL：`https://aigc-api.hkust-gz.edu.cn/api/v2`

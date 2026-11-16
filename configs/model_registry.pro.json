@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "pricing_as_of": "2026-10-21",
+  "currency": "CNY",
+  "models": [
+    {
+      "model_id": "DeepSeek-V4-Pro",
+      "family": "DeepSeek",
+      "release_date": "2026-08-13",
+      "context_window_tokens": 1048576,
+      "standard_pricing": true,
+      "input_rmb_per_million": "4.5",
+      "output_rmb_per_million": "13.5",
+      "response_model_ids": [
+        "DeepSeek-V4-Pro"
+      ],
+      "pricing_note": "Official off-peak cache-miss rates effective 2026-08-17. Not school invoice.",
+      "deployment_note": "School returns DeepSeek-V4-Pro; exact revision not independently attested",
+      "evidence": [
+        {
+          "snapshot": "evidence/pro_20260813_prices.png",
+          "official_url": "https://api-docs.deepseek.com/zh-cn/img/v4_260813_price_cn.png",
+          "sha256": "b4221d365153bb0c459979f162e7703b014c7ee812c570e3b68c1e1558d78b4a"
+        },
+        {
+          "snapshot": "evidence/pro_limits.html",
+          "official_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+          "sha256": "c85eeb649ff392593ad0048babcbf63d73b3e6f05cbb2626808927618c01cb7b"
+        }
+      ],
+      "official_output_limit_tokens": 393216
+    }
+  ]
+}

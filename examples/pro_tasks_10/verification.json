@@ -1,0 +1,49 @@
+{
+  "status": "verified_development_results",
+  "runtime_sha256": "d129aaae4c89df8f925759e30fd48a29160bfb774b592aadee6ae4d335d4d13e",
+  "formal_accounting_complete": false,
+  "tasks": {
+    "coupon": {
+      "completed_trials": 10,
+      "successful_api_calls": 9,
+      "accepted_llm_plans": 4,
+      "invalid_plans_using_local_fallback": 5,
+      "test_accuracy": 0.7906976744186046,
+      "correct": 2006,
+      "rows": 2537,
+      "validation_best_by_prefix": {
+        "2": 0.758128078817734,
+        "5": 0.7596059113300493,
+        "8": 0.7596059113300493,
+        "10": 0.7596059113300493
+      },
+      "this_run_cost_rmb": "0.2439945",
+      "known_cumulative_cost_rmb": "0.3014195",
+      "unknown_reserved_rmb": "5.24288",
+      "actual_total_cost_rmb": null,
+      "reload_matches": true,
+      "formal_submission_eligible": false
+    },
+    "headlines": {
+      "completed_trials": 10,
+      "successful_api_calls": 9,
+      "accepted_llm_plans": 4,
+      "invalid_plans_using_local_fallback": 5,
+      "test_accuracy": 0.6686262376237624,
+      "correct": 2161,
+      "rows": 3232,
+      "validation_best_by_prefix": {
+        "2": 0.6904255319148936,
+        "5": 0.6904255319148936,
+        "8": 0.6904255319148936,
+        "10": 0.6914893617021277
+      },
+      "this_run_cost_rmb": "0.2704455",
+      "known_cumulative_cost_rmb": "0.2839105",
+      "unknown_reserved_rmb": "5.24288",
+      "actual_total_cost_rmb": null,
+      "reload_matches": true,
+      "formal_submission_eligible": false
+    }
+  }
+}

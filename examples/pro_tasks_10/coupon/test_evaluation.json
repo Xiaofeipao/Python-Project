@@ -1,0 +1,59 @@
+{
+  "metric": "accuracy",
+  "score": 0.7906976744186046,
+  "rows": 2537,
+  "model_sha256": "82a57ed585a1a748772692afdcdab9facd85e410e642494e8a68970cb3d6375a",
+  "input_sha256": "ee6dac76f43d3399b93e03363584380efa03064f8e23ad802975e9bd93978c54",
+  "classification_report": {
+    "0": {
+      "precision": 0.782,
+      "recall": 0.7141552511415525,
+      "f1-score": 0.7465393794749403,
+      "support": 1095.0
+    },
+    "1": {
+      "precision": 0.7963565387117761,
+      "recall": 0.8488210818307905,
+      "f1-score": 0.8217522658610272,
+      "support": 1442.0
+    },
+    "accuracy": 0.7906976744186046,
+    "macro avg": {
+      "precision": 0.7891782693558881,
+      "recall": 0.7814881664861715,
+      "f1-score": 0.7841458226679838,
+      "support": 2537.0
+    },
+    "weighted avg": {
+      "precision": 0.7901600823107533,
+      "recall": 0.7906976744186046,
+      "f1-score": 0.7892894709880414,
+      "support": 2537.0
+    }
+  },
+  "source_sha256": "d129aaae4c89df8f925759e30fd48a29160bfb774b592aadee6ae4d335d4d13e",
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": "released-coupon"
+  },
+  "model_usage": {
+    "evaluation_id": "released-coupon",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.3014195",
+    "unreconciled_reserved_rmb": "5.24288",
+    "actual_total_cost_rmb": null,
+    "call_count": 25,
+    "recorded_input_tokens": 23210,
+    "recorded_output_tokens": 25820,
+    "input_tokens": null,
+    "output_tokens": null,
+    "accounting_complete": false,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\7c66d6bb9fe19efa363958349251efbe4ac774703fba9a05be6d96b0f250b4e2\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "e34ca81e6ea94e4a9fec8d9aeabeb4be",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "usage": "Final evaluation only; this score is not passed to search or selection"
+}

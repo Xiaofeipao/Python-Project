@@ -98,6 +98,9 @@ class ModelCatalog:
             self.models[key] = model
 
     def _validate(self, model):
+        if 'official_output_limit_tokens' in model:
+            if model.get('model_id') != 'DeepSeek-V4-Pro' or model['official_output_limit_tokens'] != 393216:
+                raise ValueError('Output reservation reduction requires the reviewed Pro official limit')
         if model.get('model_id') == 'DeepSeek-V4.1-Flash':
             rates = tuple(amount(model.get(k)) for k in ('input_rmb_per_million', 'output_rmb_per_million'))
             if rates != tuple(map(amount, FLASH_OFF_PEAK_RATES)) or model.get('pricing_tiers'):
@@ -175,6 +178,13 @@ def official_cost(model, input_tokens, output_tokens):
             + amount(rates["output_rmb_per_million"]) * output_tokens) / Decimal(1_000_000)
 
 
+def worst_case_cost(model):
+    rates = pricing_rows(model)
+    output_limit = min(model['context_window_tokens'], tokens(model.get('official_output_limit_tokens', model['context_window_tokens'])))
+    return (max(amount(r['input_rmb_per_million']) for r in rates) * model['context_window_tokens'] +
+            max(amount(r['output_rmb_per_million']) for r in rates) * output_limit) / Decimal(1_000_000)
+
+
 class UsageLedger:
     def __init__(self, directory, evaluation_id, budget="20"):
         self.directory = Path(directory).resolve()
@@ -204,19 +214,18 @@ class UsageLedger:
             raise ValueError("Usage ledger belongs to another evaluation task")
         return state
 
-    def reserve(self, model, max_output_tokens, agent_id, run_id, request_path):
+    def reserve(self, model, max_output_tokens, agent_id, run_id, request_path, allow_reserved_unknown=False):
         if tokens(max_output_tokens) == 0:
             raise ValueError("Output-token limit must be positive")
         with self.locked():
             state = self._read()
-            if any(call["status"] != "recorded" for call in state["calls"]):
+            if any(call['status'] != 'recorded' and (not allow_reserved_unknown or call['status'] != 'usage_unknown') for call in state['calls']):
                 raise UsageUncertain("Prior request has unreconciled usage; no further model requests allowed")
-            spent = sum((amount(call.get("cost_rmb", "0")) for call in state["calls"]), Decimal(0))
+            spent = sum((amount(call['cost_rmb']) if call.get('cost_rmb') is not None else amount(call['reserved_rmb']) for call in state['calls']), Decimal(0))
             rates = pricing_rows(model)
             # Cover reasoning output too, even on a provider whose max_tokens
             # interpretation is narrower than total generated output tokens.
-            reserve = (max(amount(row["input_rmb_per_million"]) for row in rates)
-                       + max(amount(row["output_rmb_per_million"]) for row in rates)) * model["context_window_tokens"] / Decimal(1_000_000)
+            reserve = worst_case_cost(model)
             if spent + reserve > self.budget:
                 raise BudgetExhausted("Next worst-case model request would exceed this task's RMB budget")
             call = {"call_id": uuid.uuid4().hex, "agent_id": agent_id, "run_id": run_id,

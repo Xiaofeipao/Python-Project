@@ -208,7 +208,7 @@ def train_agent(config, output):
         if not successful:
             raise RuntimeError("No successful validation trial; inspect experiment diagnostics")
         usage = planner.export_usage()
-        if not usage["accounting_complete"] or not usage["within_budget"]:
+        if (not usage["accounting_complete"] and not config.allow_provisional_accounting) or not usage["within_budget"]:
             raise RuntimeError("Model usage is unreconciled or over budget; cannot publish a final solution")
         selected = None
         for rank, record in enumerate(successful, 1):
@@ -261,7 +261,7 @@ def train_agent(config, output):
             try:
                 summary["model_usage"] = planner.export_usage()
                 if summary["status"] == "completed" and (
-                    not summary["model_usage"]["accounting_complete"] or not summary["model_usage"]["within_budget"]
+                    (not summary["model_usage"]["accounting_complete"] and not config.allow_provisional_accounting) or not summary["model_usage"]["within_budget"]
                 ):
                     raise RuntimeError("Final shared model-usage accounting is incomplete or over budget")
             except Exception as exc:
@@ -276,6 +276,8 @@ def train_agent(config, output):
             (output / "model.joblib").replace(output / name)
             summary["partial_model_path"] = str(output / name)
             summary.pop("model_path", None)
+        summary['accounting_provisional'] = not summary.get('model_usage', {}).get('accounting_complete', False)
+        summary['eligible_for_formal_submission'] = not summary['accounting_provisional']
         summary.update(trials=len(history), elapsed_seconds=time.monotonic() - started)
         write_json(output / "summary.json", summary)
         event(output, "run_finished", **summary)

@@ -14,7 +14,7 @@ from urllib.error import URLError
 from .io import append_json, event, write_json
 from .search import candidate_key, next_candidate
 from .submission import ROOT
-from .usage import BudgetExhausted, ModelCatalog, UsageLedger, UsageUncertain, amount, pricing_rows
+from .usage import BudgetExhausted, ModelCatalog, UsageLedger, UsageUncertain, amount, pricing_rows, worst_case_cost
 
 
 class NoRedirects(HTTPRedirectHandler):
@@ -85,7 +85,7 @@ class AutonomousPlanner:
         self.catalog = None
         self.model = None
         initial = self.export_usage()
-        if not initial["accounting_complete"] or not initial["within_budget"]:
+        if (not initial["accounting_complete"] and not config.allow_provisional_accounting) or not initial["within_budget"]:
             raise UsageUncertain("Shared task ledger is incomplete or already exceeds its budget")
         if config.llm_mode == "required":
             self.catalog = ModelCatalog(config.llm_registry)
@@ -115,12 +115,11 @@ class AutonomousPlanner:
         fallback, reason = next_candidate(profile, history, metric)
         if self.model is None or not history or fallback is None:
             return fallback, reason
-        rates = pricing_rows(self.model)
-        reserve = (max(amount(r['input_rmb_per_million']) for r in rates) +
-                   max(amount(r['output_rmb_per_million']) for r in rates)) * self.model['context_window_tokens'] / 1_000_000
-        if amount(self.ledger.summary()['actual_recorded_cost_rmb']) + reserve > amount(self.config.max_cost_rmb):
-            event(self.output, 'search_stopped', reason='Configured cost ceiling cannot cover another worst-case call')
-            return None, 'Cost ceiling reached; preserve final-fit time'
+        reserve = worst_case_cost(self.model)
+        account = self.ledger.summary()
+        if amount(account['actual_recorded_cost_rmb']) + amount(account['unreconciled_reserved_rmb']) + reserve > amount(self.config.max_cost_rmb):
+            event(self.output, 'llm_skipped', reason='Worst-case total with prior unknown reservations exceeds cost ceiling; use local planner')
+            return fallback, reason
         menu = candidate_menu(profile, history, metric)
         if not menu:
             return None, 'Remaining candidate families were abandoned after repeated failures'
@@ -152,7 +151,8 @@ class AutonomousPlanner:
         request_path = folder / f"{uuid.uuid4().hex}.request.json"
         try:
             call = self.ledger.reserve(self.model, self.config.llm_max_output_tokens,
-                                       self.config.llm_agent_id, self.run_id, request_path)
+                                       self.config.llm_agent_id, self.run_id, request_path,
+                                       allow_reserved_unknown=self.config.allow_provisional_accounting)
         except BudgetExhausted:
             event(self.output, "llm_skipped", reason="RMB budget cannot cover another worst-case reservation; use deterministic planner")
             self.export_usage()
@@ -207,6 +207,9 @@ class AutonomousPlanner:
                                             error='DNSResolutionError' if dns_not_sent else type(exc).__name__,
                                             dns_not_sent=dns_not_sent)
                 append_json(self.output / "model_calls.jsonl", record)
+            if self.config.allow_provisional_accounting and isinstance(exc, (TimeoutError, URLError)):
+                event(self.output, 'llm_unavailable', error=type(exc).__name__, action='No retry; use deterministic fallback; retain reservation')
+                return fallback, reason
             # Do not retry ambiguous calls or silently continue a reportable run.
             raise
         finally:

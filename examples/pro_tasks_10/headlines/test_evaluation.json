@@ -1,0 +1,59 @@
+{
+  "metric": "accuracy",
+  "score": 0.6686262376237624,
+  "rows": 3232,
+  "model_sha256": "ed6d29a3eb7ebb326f144ed87b28596f50775099c5a60b742e3455a476b98c64",
+  "input_sha256": "d3a4e3977803861d60127b919babc77e07aa6fe3ffb06020c57f7ab1828ac300",
+  "classification_report": {
+    "0": {
+      "precision": 0.684993531694696,
+      "recall": 0.6445526475958613,
+      "f1-score": 0.6641580432737535,
+      "support": 1643.0
+    },
+    "1": {
+      "precision": 0.6536180308422301,
+      "recall": 0.6935179358086847,
+      "f1-score": 0.6729770992366412,
+      "support": 1589.0
+    },
+    "accuracy": 0.6686262376237624,
+    "macro avg": {
+      "precision": 0.6693057812684631,
+      "recall": 0.669035291702273,
+      "f1-score": 0.6685675712551973,
+      "support": 3232.0
+    },
+    "weighted avg": {
+      "precision": 0.6695678909599905,
+      "recall": 0.6686262376237624,
+      "f1-score": 0.6684938972109531,
+      "support": 3232.0
+    }
+  },
+  "source_sha256": "d129aaae4c89df8f925759e30fd48a29160bfb774b592aadee6ae4d335d4d13e",
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": "released-headlines"
+  },
+  "model_usage": {
+    "evaluation_id": "released-headlines",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.2839105",
+    "unreconciled_reserved_rmb": "5.24288",
+    "actual_total_cost_rmb": null,
+    "call_count": 15,
+    "recorded_input_tokens": 11995,
+    "recorded_output_tokens": 19640,
+    "input_tokens": null,
+    "output_tokens": null,
+    "accounting_complete": false,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "386cf82f880a4cb8aad131c521108016",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "usage": "Final evaluation only; this score is not passed to search or selection"
+}
