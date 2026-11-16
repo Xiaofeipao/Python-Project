@@ -1,0 +1,16 @@
+{
+  "requested_model": "DeepSeek-V4.1-Flash",
+  "returned_model": "DeepSeek-V4.1-Flash",
+  "exact_revision_verified": false,
+  "usage": {
+    "completion_tokens": 485,
+    "prompt_tokens": 682,
+    "total_tokens": 1167,
+    "completion_tokens_details": {
+      "reasoning_tokens": 240
+    }
+  },
+  "cost_rmb": "0.002622",
+  "response_sha256": "5061ca7385deb3b01ef707a985618cf1b825cde4c81627923c4d95cb7238b8c5",
+  "purpose": "Real connectivity/accounting check, not a Released Task evaluation"
+}

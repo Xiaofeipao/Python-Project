@@ -1,0 +1,48 @@
+{
+  "status": "completed",
+  "metric": "accuracy",
+  "trials": 2,
+  "test_set_used_for_selection": false,
+  "partial": false,
+  "submission": {
+    "evaluation_stage": "development",
+    "evaluation_id": "development-api-connectivity-20261116"
+  },
+  "partial_model_path": "<RUN>\\partial\\v001\\model.joblib",
+  "partial_version": 1,
+  "partial_predictions": {
+    "rows": 30,
+    "output": "<RUN>\\partial\\v001\\predictions.csv"
+  },
+  "selected_trial": 1,
+  "selected_candidate": {
+    "family": "dummy"
+  },
+  "validation_score": 0.3333333333333333,
+  "model_path": "<RUN>\\model.joblib",
+  "final_test_score": null,
+  "prediction": {
+    "rows": 30,
+    "output": "<RUN>\\predictions.csv"
+  },
+  "model_usage": {
+    "evaluation_id": "development-api-connectivity-20261116",
+    "budget_rmb": "20",
+    "actual_recorded_cost_rmb": "0.002622",
+    "unreconciled_reserved_rmb": "0",
+    "actual_total_cost_rmb": "0.002622",
+    "call_count": 1,
+    "recorded_input_tokens": 682,
+    "recorded_output_tokens": 485,
+    "input_tokens": 682,
+    "output_tokens": 485,
+    "accounting_complete": true,
+    "within_budget": true,
+    "ledger_path": "<PROJECT>\\.model_usage\\e8166d1e0d5f7221490c46e99a57331bf638072112b3621fc8cc83d7d6cdbadc\\ledger.json",
+    "requires_all_agents_to_share_ledger": true,
+    "llm_mode": "required",
+    "run_id": "41f5f4c78c3c43a6bd461f3215aede68",
+    "pricing_rule": "2026-10-21 official input/output standard CNY prices; no cache discounts or free credits"
+  },
+  "elapsed_seconds": 94.65599999999995
+}

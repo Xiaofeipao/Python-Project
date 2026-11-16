@@ -15,7 +15,7 @@
   "cache_preprocessing": true,
   "llm_mode": "required",
   "llm_budget_rmb": "20",
-  "llm_registry": "model_registry.flash.json",
+  "llm_registry": "model_registry.json",
   "llm_model_id": "DeepSeek-V4.1-Flash",
   "llm_base_url": "https://aigc-api.hkust-gz.edu.cn/api/v2",
   "llm_max_output_tokens": 2048

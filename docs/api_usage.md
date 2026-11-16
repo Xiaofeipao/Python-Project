@@ -43,7 +43,7 @@ python scripts/run_released_batch.py --output runs/flash_run --max-trials 24 --l
 
 每个任务共用持久化账本，限额 20 元。输出中的 `model_usage.json`、`task_model_calls.json` 和 `model_calls/` 记录实际 token（含返回的推理用量）、核算费用、请求与响应。密钥仅在进程环境中使用，不复制到输出。API 只负责实验规划，本地训练仍可使用 GPU。
 
-`configs/final_policy.llm.example.json` 提供接入参数示例。训练任务配置使用 `llm_mode: "required"`，并填写 `llm_model_id`、`llm_base_url`、`llm_api_key_env` 和 `llm_registry`（已有模型配置文件路径）。该示例中的模型配置目录目前为空，需完成模型配置后才能用于规划；连通性测试不依赖该目录。
+`configs/final_policy.llm.example.json` 提供接入参数示例。训练任务配置使用 `llm_mode: "required"`，并填写 `llm_model_id`、`llm_base_url`、`llm_api_key_env` 和 `llm_registry`（已有模型配置文件路径）。默认注册表 `configs/model_registry.json` 已包含 Flash 的官方证据与固定空闲费率；学校部署具体修订号仍待核实。
 
 完整规划器从 `HKUST_API_KEY` 环境变量读取密钥，因此训练进程应在已设置此变量的会话中启动。规划器接收数据统计和验证反馈，从通用候选菜单中选择下一项实验；不会向接口发送测试集或执行任意生成代码。
 
@@ -52,3 +52,5 @@ python scripts/run_released_batch.py --output runs/flash_run --max-trials 24 --l
 ```powershell
 Remove-Item Env:HKUST_API_KEY
 ```
+
+每次 API 尝试会刷新任务累计 `usage.jsonl`；`summary.json` 的 `model_usage` 汇总 token、已知费用和未知用量预留。历史失败不会删除，未知费用不会当作零。

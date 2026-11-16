@@ -6,7 +6,7 @@
   "compute_profile": "auto",
   "device": "auto",
   "llm_mode": "required",
-  "llm_registry": "model_registry.flash.json",
+  "llm_registry": "model_registry.json",
   "llm_model_id": "DeepSeek-V4.1-Flash",
   "llm_base_url": "https://aigc-api.hkust-gz.edu.cn/api/v2",
   "llm_api_key_env": "HKUST_API_KEY",

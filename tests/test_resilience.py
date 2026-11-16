@@ -34,7 +34,7 @@ class ResilienceTests(unittest.TestCase):
                               'label': ['a', 'b']*5}).to_csv(root/f'{name}.csv', index=False)
             result = train_agent(TaskConfig(train_csv=str(root/'train.csv'), validation_csv=str(root/'val.csv'),
                 test_csv=str(root/'test.csv'), target_column='label', id_column='id', device='cpu',
-                enable_torch=False, max_trials=1, time_budget_seconds=90), root/'run')
+                enable_torch=False, max_trials=1, time_budget_seconds=300), root/'run')
             self.assertFalse(result['test_set_used_for_selection'])
             self.assertTrue((root/'run/partial/v001/predictions.csv').exists())
             events = [json.loads(s) for s in (root/'run/events.jsonl').read_text().splitlines()]

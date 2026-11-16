@@ -31,6 +31,10 @@ ROLLING_ALIASES = {
     "qwen-turbo", "qwen-long", "qwen-flash", "qwen3-max",
 }
 
+# Official 2026-09-10 effective off-peak cache-miss rates, CNY / million tokens.
+# Fixed accounting policy requested for this project; not provider invoice rates.
+FLASH_OFF_PEAK_RATES = ('1', '4')
+
 
 def amount(value):
     if isinstance(value, bool):
@@ -94,6 +98,10 @@ class ModelCatalog:
             self.models[key] = model
 
     def _validate(self, model):
+        if model.get('model_id') == 'DeepSeek-V4.1-Flash':
+            rates = tuple(amount(model.get(k)) for k in ('input_rmb_per_million', 'output_rmb_per_million'))
+            if rates != tuple(map(amount, FLASH_OFF_PEAK_RATES)) or model.get('pricing_tiers'):
+                raise ValueError('Flash accounting rates must match the fixed official off-peak policy')
         family = model.get("family")
         key = model.get("model_id", "")
         if family not in {"Qwen", "DeepSeek"} or not isinstance(key, str) or not key.lower().startswith(family.lower()):

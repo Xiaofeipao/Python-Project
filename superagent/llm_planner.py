@@ -104,6 +104,11 @@ class AutonomousPlanner:
                        pricing_rule="2026-10-21 official input/output standard CNY prices; no cache discounts or free credits")
         write_json(self.output / "model_usage.json", summary)
         write_json(self.output / "task_model_calls.json", self.ledger.audit_records())
+        # A task-wide snapshot includes calls from earlier attempts, not only this run.
+        records = self.ledger.audit_records()['calls']
+        temporary = self.output / 'usage.jsonl.tmp'
+        temporary.write_text(''.join(json.dumps(r, ensure_ascii=False) + '\n' for r in records), encoding='utf-8')
+        os.replace(temporary, self.output / 'usage.jsonl')
         return summary
 
     def choose(self, profile, history, metric, deadline):
