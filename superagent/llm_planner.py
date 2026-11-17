@@ -13,6 +13,7 @@ from urllib.error import URLError
 
 from .io import append_json, event, write_json
 from .search import candidate_key, next_candidate
+from .proposals import RULES, apply_proposal
 from .submission import ROOT
 from .usage import BudgetExhausted, ModelCatalog, UsageLedger, UsageUncertain, amount, pricing_rows, worst_case_cost
 
@@ -124,14 +125,17 @@ class AutonomousPlanner:
         if not menu:
             return None, 'Remaining candidate families were abandoned after repeated failures'
         context = planning_context(profile, history, metric, menu)
+        context['parameter_proposal_rules'] = RULES
         body = {
             "model": self.model["model_id"], "stream": False,
             "max_tokens": self.config.llm_max_output_tokens,
             "messages": [
-                {"role": "system", "content": "Use the trial history and validation feedback to diagnose successes/failures and choose one menu experiment. Return JSON only: {\"choice\": integer, \"diagnosis\": string, \"next_action\": string, \"abandoned_strategy\": string, \"reason\": string}. Explain why the next experiment addresses observed evidence; mention switches after repeated failures. Do not invent results. Never use test data, task identity, external tools or executable code. Do not change the assigned metric."},
+                {"role": "system", "content": "Use validation evidence to formulate a falsifiable experiment. Choose a menu seed; prefer a modest new parameter proposal after a plateau; add proposal: a JSON object of parameter overrides within parameter_proposal_rules for that seed family. Never change family, metric, resources, paths or code. Add hypothesis and success_criterion as short strings. Make the final JSON concise and complete. Return JSON only: {\"proposal\": {parameter: value}, \"hypothesis\": string, \"success_criterion\": string, \"choice\": integer, \"diagnosis\": string, \"next_action\": string, \"abandoned_strategy\": string, \"reason\": string}. Explain why the next experiment addresses observed evidence; mention switches after repeated failures. Do not invent results. Never use test data, task identity, external tools or executable code. Do not change the assigned metric."},
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False, allow_nan=False)},
             ],
         }
+        if self.config.llm_model_id == "DeepSeek-V4-Pro":
+            body["reasoning_effort"] = "low"
         serialized = json.dumps(body, ensure_ascii=False, allow_nan=False).encode("utf-8")
         # Byte bound is deliberately conservative; also reserve the full
         # official context window rather than guessing a tokenizer's cost.
@@ -189,6 +193,10 @@ class AutonomousPlanner:
                 if type(choice) is not int or not 0 <= choice < len(menu):
                     raise ValueError("Model choice is not a menu index")
                 proposed = menu[choice]["candidate"]
+                proposed = apply_proposal(proposed, selection.get('proposal', {}), profile)
+                if selection.get('proposal') and any(not isinstance(selection.get(k), str) or not selection[k].strip()
+                                                     for k in ('hypothesis', 'success_criterion')):
+                    raise ValueError('New parameter proposals require a testable hypothesis and success criterion')
                 if candidate_key(proposed) in {candidate_key(item["candidate"]) for item in history}:
                     raise ValueError("Model selected an already executed candidate")
                 explanation = str(selection.get("reason", ""))[:2000]
@@ -198,6 +206,8 @@ class AutonomousPlanner:
             event(self.output, "llm_plan_selected", call_id=call["call_id"], candidate=proposed, explanation=explanation,
                   diagnosis=selection.get('diagnosis', explanation), next_action=selection.get('next_action', explanation),
                   abandoned_strategy=selection.get('abandoned_strategy', ''),
+                  proposal=selection.get('proposal', {}), hypothesis=selection.get('hypothesis', ''),
+                  success_criterion=selection.get('success_criterion', ''),
                   based_on_trials=len(history), observed_metric=metric)
             return proposed, f"LLM menu selection ({call['call_id']}): {explanation}"
         except BaseException as exc:

@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--key-file', type=Path, help='Read credentials locally; never copied to outputs')
     parser.add_argument('--time-budget', type=float, default=7200)
     parser.add_argument('--provisional-accounting', action='store_true')
+    parser.add_argument('--llm-output-tokens', type=int, default=4096)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -42,7 +43,7 @@ def main():
             os.environ['HKUST_API_KEY'] = args.key_file.read_text(encoding='utf-8-sig').strip()
         policy.update(llm_mode='required', llm_registry=str(args.llm_registry.resolve()),
                       llm_model_id=args.llm_model, llm_base_url='https://aigc-api.hkust-gz.edu.cn/api/v2',
-                      llm_max_output_tokens=2048, llm_timeout_seconds=180, llm_budget_rmb='20')
+                      llm_max_output_tokens=args.llm_output_tokens, llm_timeout_seconds=180, llm_budget_rmb='20')
     if args.provisional_accounting:
         policy.update(allow_provisional_accounting=True, max_cost_rmb='20')
     (output / 'policy.json').write_text(json.dumps(policy, indent=2), encoding='utf-8')

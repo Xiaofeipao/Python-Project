@@ -15,7 +15,9 @@ def fit_with_fallback(model, X, y):
     recoveries = []
     for attempt in range(3):
         try:
-            model.fit(X, y)
+            from joblib import parallel_config
+            with parallel_config(prefer="threads"):
+                model.fit(X, y)
             return model, recoveries
         except Exception as exc:
             if 'out of memory' not in str(exc).lower() or attempt == 2:

@@ -124,6 +124,10 @@ python main.py predict --model runs/cpu_smoke_new/model.joblib --input examples/
 
 ## 正式提交的测试隔离与轮数比较
 
+新增受约束实验提议：LLM 可选一个通用候选作为种子，再通过 `proposal` 提出允许范围内的参数变体，同时给出 `hypothesis` 和 `success_criterion`。`superagent/proposals.py` 拒绝修改模型族、代码、路径、指标、资源及范围外参数；提议仍由验证反馈检验，而不是预先宣称有效。没有使用任务名或数据集身份定制搜索。
+
+多列文本增加通用概率融合候选，复用有序字符逻辑回归与词/字符校准 SVM。新增能力、参数变体及融合均属于搜索空间；不能据此直接断言准确率提高。Pro 规划输出上限默认提高到 4096 tokens，可通过 `--llm-output-tokens` 设置，实际 token 和费用仍逐次记录。
+
 正式策略和批量脚本默认 `progressive_output: false`：搜索期间不读测试文件、不生成中间测试预测，最终选型完成后才推理与评估。开发者如显式开启中间产出，须单独标注该运行，不能冒充严格隔离的正式结果。
 
 `feedback_assessed` 将每轮验证结果与此前最优值对照，记录真实增益或停滞；结合 `llm_plan_selected` 的诊断与下一步理由形成证据链。不能事后编写不存在的 LLM 推理，也不保证多跑必然提高测试分数。

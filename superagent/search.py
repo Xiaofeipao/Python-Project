@@ -105,6 +105,8 @@ def next_candidate(profile, history, metric):
                 {'family': 'xgboost', 'iterations': 1000, 'depth': depth, 'learning_rate': .03,
                  'reg_lambda': 10, 'analyzer': 'combined', 'representation': 'separate',
                  'svd_components': 128} for depth in (3, 6)]
+    if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) > 1:
+        initial.insert(0, {'family': 'text_blend', 'linear_weight': .5, 'C': .1})
     if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
         initial[0:0] = [{'family': 'cross_boost_blend'}] + [
             {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
@@ -141,6 +143,9 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, reg_lambda=value) for value in (1, 20, 50)]
         elif family == 'cross_boost_blend':
             variants = []
+        elif family == 'text_blend':
+            variants = [dict(candidate, linear_weight=w) for w in (.25, .75)]
+            variants += [dict(candidate, C=c) for c in (.03, .3)]
         elif family in {"linear_svm", "rbf_svm"}:
             variants = [dict(candidate, C=value) for value in (.01, 100.)]
         elif family == "logistic":
@@ -173,6 +178,15 @@ def next_candidate(profile, history, metric):
 
 def build_model(profile, candidate, config):
     family = candidate["family"]
+    if family == 'text_blend':
+        from .tabular_models import ProbabilityBlend
+        weight = candidate.get('linear_weight', .5)
+        members = [build_model(profile, {'family': 'logistic', 'C': 1., 'analyzer': 'char',
+                    'representation': 'separate', 'class_weight': 'balanced'}, config),
+                   build_model(profile, {'family': 'linear_svm', 'C': candidate.get('C', .1),
+                    'analyzer': 'combined', 'representation': 'separate'}, config)]
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', ProbabilityBlend(members, weights=[weight, 1-weight]))])
     common = {"random_state": config.seed}
     if family == "dummy":
         estimator = DummyClassifier(strategy="prior", **common)
