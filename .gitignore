@@ -1,7 +1,7 @@
 __pycache__/
 *.py[cod]
 .venv/
-data/
+/data/
 runs/
 .env
 .env.*
@@ -13,3 +13,31 @@ api_key.txt
 *.joblib
 .model_usage/
 releases/
+.pretrained_cache/
+
+# Local datasets, packaged submissions and presentation material
+in_vehicle_coupon_recommendation/
+Released_Task2-Headlines_CTR/
+__MACOSX/
+submission_*/
+pre/
+examples/creative_experiment_20261117/
+
+# Only the canonical report PDF is published
+*.pdf
+!docs/report/report.pdf
+*.ppt
+*.pptx
+*.pptm
+*.pps
+*.ppsx
+*.odp
+
+# LaTeX intermediate files
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz

@@ -54,6 +54,12 @@ class TaskConfig:
     progressive_output: bool = False
     max_cost_rmb: str = '15'
     allow_provisional_accounting: bool = False
+    enable_minilm: bool = False
+    stability_repeats: int = 1
+    search_patience: int = 0
+    nested_cv_folds: int = 0
+    nested_cv_max_rows: int = 600
+    enable_feature_search: bool = False
 
     @classmethod
     def load(cls, path):
@@ -62,7 +68,7 @@ class TaskConfig:
         unknown = set(raw) - {f.name for f in fields(cls)}
         if unknown:
             raise ValueError(f"Unknown configuration fields: {sorted(unknown)}")
-        from .submission import frozen_policy
+        from superagent.governance.frozen_bundle import frozen_policy
 
         raw = frozen_policy(raw, path)
         config = cls(**raw)
@@ -78,14 +84,24 @@ class TaskConfig:
         return config
 
     def validate(self):
+        if type(self.nested_cv_folds) is not int or self.nested_cv_folds not in (0,2,3):
+            raise ValueError('nested_cv_folds must be 0, 2 or 3')
+        if type(self.nested_cv_max_rows) is not int or self.nested_cv_max_rows < 30:
+            raise ValueError('nested_cv_max_rows must be >=30')
+        if type(self.enable_feature_search) is not bool:
+            raise ValueError('enable_feature_search must be boolean')
+        if type(self.stability_repeats) is not int or not 1 <= self.stability_repeats <= 3:
+            raise ValueError('stability_repeats must be 1..3')
+        if type(self.search_patience) is not int or self.search_patience < 0:
+            raise ValueError('search_patience must be a nonnegative integer')
         if type(self.allow_provisional_accounting) is not bool or (self.allow_provisional_accounting and self.evaluation_stage != 'development'):
             raise ValueError('Provisional accounting is permitted only for explicitly marked development runs')
-        from .usage import amount
+        from superagent.governance.usage_ledger import amount
         if not 0 < amount(self.max_cost_rmb) <= amount(self.llm_budget_rmb):
             raise ValueError('max_cost_rmb must be positive and within the model usage budget')
         if type(self.progressive_output) is not bool:
             raise ValueError('progressive_output must be boolean')
-        from .usage import amount
+        from superagent.governance.usage_ledger import amount
 
         if self.evaluation_stage not in {"development", "released", "unseen"}:
             raise ValueError("evaluation_stage must be development/released/unseen")

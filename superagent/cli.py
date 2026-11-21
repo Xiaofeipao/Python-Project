@@ -13,6 +13,7 @@ def parser():
     train = commands.add_parser("train", help="Autonomously search and refit a classification solution")
     train.add_argument("--config", required=True)
     train.add_argument("--output", required=True, help="New directory for this autonomous run")
+    train.add_argument('--resume-from', help='Verified interrupted run; output must still be a new directory')
     freeze = commands.add_parser("freeze", help="Create an immutable submission bundle without training")
     freeze.add_argument("--policy", required=True, help="JSON algorithm policy; no task-specific input data")
     freeze.add_argument("--output", required=True, help="New frozen bundle directory")
@@ -54,21 +55,21 @@ def main(argv=None):
         if args.command == "doctor":
             return doctor()
         if args.command == "freeze":
-            from .submission import freeze_submission
+            from superagent.governance.frozen_bundle import freeze_submission
 
             result = freeze_submission(args.policy, args.output)
         elif args.command == "verify-freeze":
-            from .submission import verify_bundle
+            from superagent.governance.frozen_bundle import verify_bundle
 
             manifest = verify_bundle(args.manifest)
             result = {"status": "verified", "runtime_sha256": manifest["runtime_sha256"]}
         elif args.command == "train":
-            from .agent import train_agent
-            from .config import TaskConfig
+            from superagent.runtime.orchestrator import train_agent
+            from superagent.config import TaskConfig
 
-            result = train_agent(TaskConfig.load(args.config), args.output)
+            result = train_agent(TaskConfig.load(args.config), args.output, args.resume_from)
         else:
-            from .prediction import evaluate, predict
+            from superagent.evaluation.inference import evaluate, predict
 
             action = predict if args.command == "predict" else evaluate
             result = action(args.model, args.input, args.output, args.image_root)

@@ -1,0 +1,213 @@
+"""Serializable train-only preprocessors, shared by training and prediction."""
+
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from scipy import sparse
+from PIL import Image, ImageOps
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import TruncatedSVD
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline, FeatureUnion
+from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+
+
+def checked_vectorizer_options(options):
+    if options is not None and not isinstance(options,dict):raise ValueError('Vectorizer options must be an object')
+    options=dict(options or {})
+    for key,value in options.items():
+        if key in {'use_idf','binary'}:
+            valid=type(value) is bool
+        elif key=='min_df':
+            valid=type(value) is int and 1<=value<=10
+        elif key=='max_features':
+            valid=type(value) is int and 1000<=value<=100000
+        elif key=='stop_words':
+            valid=value in (None,'english')
+        elif key=='ngram_range':
+            valid=isinstance(value,(list,tuple)) and len(value)==2 and all(type(v) is int for v in value) and 1<=value[0]<=value[1]<=5
+        else:
+            valid=False
+        if not valid:raise ValueError('Unapproved vectorizer option')
+    if 'ngram_range' in options:options['ngram_range']=tuple(options['ngram_range'])
+    return options
+
+
+class ConstantFeatures(BaseEstimator, TransformerMixin):
+    def fit(self, X, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        return np.zeros((len(X), 1), dtype=np.float32)
+
+
+class BoundedSVD(BaseEstimator, TransformerMixin):
+    """Fit a training-only projection, including on small input matrices."""
+    def __init__(self, n_components=128):
+        self.n_components = n_components
+
+    def fit(self, X, y=None):
+        count = min(self.n_components, X.shape[0], X.shape[1])
+        self.model_ = TruncatedSVD(n_components=count, random_state=42) if X.shape[1] > 1 else None
+        if self.model_ is not None:
+            self.model_.fit(X)
+        return self
+
+    def transform(self, X):
+        return self.model_.transform(X) if self.model_ is not None else X.toarray()
+
+
+class FrameSchema(BaseEstimator, TransformerMixin):
+    def __init__(self, columns, numeric):
+        self.columns = columns
+        self.numeric = numeric
+
+    def fit(self, X, y=None):
+        self.transform(X)
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        missing = set(self.columns) - set(X.columns)
+        if missing:
+            raise ValueError(f"Missing prediction features: {sorted(missing)}")
+        result = X[self.columns].copy()
+        for column in self.columns:
+            if column in self.numeric:
+                result[column] = pd.to_numeric(result[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
+            else:
+                result[column] = result[column].map(lambda v: np.nan if pd.isna(v) else str(v))
+        return result
+
+
+class JoinText(BaseEstimator, TransformerMixin):
+    def __init__(self, columns):
+        self.columns = columns
+
+    def fit(self, X, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        return X[self.columns].fillna("").astype(str).agg(" ".join, axis=1).tolist()
+
+
+class MultiTextFeatures(BaseEstimator, TransformerMixin):
+    """Shared training vocabulary, preserving column identity or signed differences."""
+    def __init__(self, columns, analyzer="word", representation="difference", max_features=30000, options=None):
+        self.columns = columns
+        self.analyzer = analyzer
+        self.representation = representation
+        self.max_features = max_features
+        self.options = options
+
+    def fit(self, X, y=None):
+        character = self.analyzer == 'char'
+        self.vectorizer_ = TfidfVectorizer(analyzer='char' if character else 'word',
+            ngram_range=(2, 5) if character else (1, 2), min_df=2,
+            token_pattern=None if character else r'(?u)\b\w+\b',
+            max_features=self.max_features, sublinear_tf=True, dtype=np.float32)
+        if self.analyzer == 'combined':
+            self.vectorizer_ = FeatureUnion([
+                ('word', self.vectorizer_),
+                ('char', TfidfVectorizer(analyzer='char', ngram_range=(2, 5), min_df=2,
+                                         max_features=self.max_features, sublinear_tf=True, dtype=np.float32))])
+        if self.options:
+            vectors = [v for _,v in self.vectorizer_.transformer_list] if self.analyzer=='combined' else [self.vectorizer_]
+            for vector in vectors:
+                vector.set_params(**checked_vectorizer_options(self.options))
+        self.vectorizer_.fit(pd.concat([X[c].fillna('').astype(str) for c in self.columns], ignore_index=True))
+        return self
+
+    def transform(self, X):
+        texts = [X[c].fillna('').astype(str) for c in self.columns]
+        vectors = [self.vectorizer_.transform(t) for t in texts]
+        stats = [np.asarray([[np.log1p(len(s)), np.log1p(len(s.split())), s.count('?'), s.count('!'),
+                              sum(ch.isdigit() for ch in s), sum(ch.isupper() for ch in s)] for s in t], dtype=np.float32)
+                 for t in texts]
+        if self.representation == 'difference':
+            if len(vectors) != 2:
+                raise ValueError('Signed text differences require two input columns')
+            return sparse.hstack([vectors[0] - vectors[1], sparse.csr_matrix(stats[0] - stats[1])], format='csr')
+        return sparse.hstack([*vectors, sparse.csr_matrix(np.hstack(stats))], format='csr')
+
+
+class ImageFeatures(BaseEstimator, TransformerMixin):
+    def __init__(self, column, root, size=24):
+        self.column = column
+        self.root = root
+        self.size = size
+
+    def fit(self, X, y=None):
+        self.is_fitted_ = True
+        return self
+
+    def transform(self, X):
+        vectors = []
+        for value in X[self.column]:
+            if pd.isna(value) or not str(value).strip():
+                raise ValueError("Image path must not be missing")
+            path = Path(self.root) / str(value)
+            with Image.open(path) as image:
+                rgb = ImageOps.exif_transpose(image).convert("RGB")
+                pixels = np.asarray(rgb.resize((self.size, self.size), Image.Resampling.BILINEAR), dtype=np.float32) / 255.0
+            histograms = [np.histogram(pixels[:, :, c], bins=16, range=(0, 1), density=False)[0]
+                          / (self.size * self.size) for c in range(3)]
+            vectors.append(np.concatenate([pixels.ravel(), *histograms]).astype(np.float32))
+        return np.asarray(vectors, dtype=np.float32)
+
+
+def preprocessor(profile, candidate, image_root):
+    if candidate["family"] == "dummy":
+        return ConstantFeatures()
+    modality = profile["data_type"]
+    if modality == "text":
+        if candidate.get('representation'):
+            features = MultiTextFeatures(profile['text_columns'], candidate.get('analyzer', 'word'),
+                                     candidate['representation'],
+                                     10000 if candidate['family'].startswith('torch_') else 30000,
+                                     candidate.get('vectorizer_options'))
+            if candidate.get('svd_components'):
+                return Pipeline([('text', features), ('svd', BoundedSVD(candidate['svd_components'])),
+                                 ('scale', StandardScaler())])
+            return features
+        character = candidate.get("analyzer", "word") == "char"
+        return Pipeline([
+            ("join", JoinText(profile["text_columns"])),
+            ("tfidf", TfidfVectorizer(
+                analyzer="char" if character else "word",
+                ngram_range=(2, 4) if character else (1, 2),
+                token_pattern=None if character else r"(?u)\b\w+\b",
+                max_features=12000 if candidate["family"].startswith("torch_") else 30000,
+                sublinear_tf=True, dtype=np.float32,
+            ).set_params(**checked_vectorizer_options(candidate.get('vectorizer_options')))),
+        ])
+    if modality == "image":
+        if candidate["family"] in {"torch_cnn", "torch_resnet", "torch_ensemble"}:
+            return Pipeline([("images", ImageFeatures(profile["image_column"], image_root,
+                                                       candidate.get("size", 32)))])
+        return Pipeline([
+            ("images", ImageFeatures(profile["image_column"], image_root, candidate.get("size", 24))),
+            ("scale", StandardScaler()),
+        ])
+    numeric = profile["numeric_columns"]
+    categorical = profile["categorical_columns"]
+    transforms = []
+    if numeric:
+        transforms.append(("numeric", Pipeline([
+            ("impute", SimpleImputer(strategy=candidate.get('imputer','median'), keep_empty_features=True)),
+            ("scale", StandardScaler()),
+        ]), numeric))
+    if categorical:
+        transforms.append(("category", Pipeline([
+            ("impute", SimpleImputer(strategy="constant", fill_value="__missing__", keep_empty_features=True)),
+            ("encode", OrdinalEncoder(handle_unknown='use_encoded_value',unknown_value=-1) if candidate.get('encoding')=='ordinal' else OneHotEncoder(handle_unknown="ignore", min_frequency=2, max_categories=128)),
+        ]), categorical))
+    return Pipeline([
+        ("schema", FrameSchema(profile["features"], numeric)),
+        ("columns", ColumnTransformer(transforms, sparse_threshold=1.0)),
+    ])
