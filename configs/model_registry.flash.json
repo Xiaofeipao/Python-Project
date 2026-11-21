@@ -18,14 +18,16 @@
       "deployment_note": "School platform returns DeepSeek-V4.1-Flash; exact revision not independently attested. Development API experiment.",
       "evidence": [
         {
-          "snapshot": "evidence/flash_20260910_prices_cn.jpeg",
+          "snapshot": "evidence/flash_20260910_prices_cn.jpeg.base64.json",
           "official_url": "https://api-docs.deepseek.com/zh-cn/img/v4.1_260910_price_cn.jpeg",
-          "sha256": "701177bc7d46edd0faf9a761123f89196ae0d2bbd70e69ba272028c641f1582c"
+          "sha256": "701177bc7d46edd0faf9a761123f89196ae0d2bbd70e69ba272028c641f1582c",
+          "encoding": "base64"
         },
         {
-          "snapshot": "evidence/flash_20260910_release.html",
+          "snapshot": "evidence/flash_20260910_release.html.base64.json",
           "official_url": "https://api-docs.deepseek.com/zh-cn/news/news260910/",
-          "sha256": "37e1d241031d0304d2add8b0c1cbeade1aea03f9a88fc63eaa044a58cdd77a85"
+          "sha256": "37e1d241031d0304d2add8b0c1cbeade1aea03f9a88fc63eaa044a58cdd77a85",
+          "encoding": "base64"
         }
       ]
     }

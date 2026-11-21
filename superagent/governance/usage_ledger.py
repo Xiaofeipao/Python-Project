@@ -5,6 +5,7 @@ depends on configured model dates and official rates, never provider promotions.
 """
 
 import json
+import hashlib
 import os
 import re
 import uuid
@@ -152,7 +153,16 @@ class ModelCatalog:
             expected = item.get("sha256", "")
             if not re.fullmatch(r"[a-f0-9]{64}", expected):
                 raise ValueError("Evidence snapshot needs its SHA-256")
-            if digest_file(safe_member(self.path.parent, item["snapshot"])) != expected:
+            evidence_path = safe_member(self.path.parent, item['snapshot'])
+            if item.get('encoding') == 'base64':
+                import base64
+                archive = json.loads(evidence_path.read_text(encoding='utf-8'))
+                actual = hashlib.sha256(base64.b64decode(archive['data_base64'], validate=True)).hexdigest()
+            elif item.get('encoding') is None:
+                actual = digest_file(evidence_path)
+            else:
+                raise ValueError('Unsupported evidence encoding')
+            if actual != expected:
                 raise ValueError("Model/pricing evidence snapshot changed")
 
     def model(self, key):

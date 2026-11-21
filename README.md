@@ -1,29 +1,29 @@
 # AIAA 3102 General Classification SuperAgent
 
-同一程序根据训练数据、资源和验证反馈选择分类方法，支持表格、文本和图像。任务名称只组织输入与产物，不指定获胜模型。
+One system selects classification methods using training data, resources and validation feedback. It supports tabular, text and image inputs. Task names organize artifacts; they do not dispatch to manually prepared winners.
 
-## 从哪里开始
+## Start here
 
-- [目录与职责](docs/architecture.md)：各层代码和数据流。
-- [建议逐项复核](docs/development/recommendation_review.md)：采纳状态、证据与限制。
-- [扩展功能及开发记录](docs/development/advanced_usage.md)：稳定性、特征筛选、嵌套诊断与恢复。
-- [API 操作](docs/guides/api_usage.md)、[正式任务流程](docs/guides/full_assignment_workflow.md)。
-- [英文报告和 LaTeX](docs/report/README.md)：报告对应的实验版本与构建方法。
+- [Architecture and directory responsibilities](docs/architecture.md)
+- [Review of every proposed improvement](docs/development/recommendation_review.md)
+- [Advanced features and experiment history](docs/development/advanced_usage.md)
+- [API setup](docs/guides/api_usage.md) and [formal evaluation workflow](docs/guides/full_assignment_workflow.md)
+- [English report and LaTeX source](docs/report/README.md)
 
-## 安装与配置
+## Installation and configuration
 
-Python 3.10+，在项目根目录的已激活环境中执行：
+Use Python 3.10+ and run from the project root in an activated environment:
 
 ```bash
 python -m pip install -r requirements.txt
 python main.py doctor
 ```
 
-GPU、XGBoost、MiniLM 等可选依赖见 `requirements-gpu.txt`。PyTorch 构建需匹配设备；`device: "auto"` 可回退 CPU。MiniLM 是默认关闭的冻结特征候选，不代替 Qwen/DeepSeek 规划语言模型。
+Optional GPU, XGBoost and MiniLM dependencies are in requirements-gpu.txt. Choose a compatible PyTorch build. `device: "auto"` supports CPU fallback. MiniLM is an optional frozen feature extractor, disabled by default; it does not replace the Qwen/DeepSeek planner.
 
-CSV 训练数据包含标签列。配置相对路径以配置文件目录为准。模态、列名、ID 和指标按课程公告填写；参见 `configs/tabular.example.json`、`text.example.json`、`image.example.json`。`configs/final_policy.json` 用于冻结算法策略。
+Training CSV files include the target column. Relative paths are resolved against the configuration directory. Follow the task announcement for modality, columns, IDs and metric. Examples are under configs/; final_policy.json contains the frozen algorithm policy.
 
-## 统一入口
+## Unified entry point
 
 ```bash
 python main.py train --config configs/tabular.example.json --output runs/task_new
@@ -31,9 +31,9 @@ python main.py predict --model runs/task_new/model.joblib --input data/test.csv 
 python main.py evaluate --model runs/task_new/model.joblib --input data/test.csv --output runs/task_new/evaluation_new.json
 ```
 
-输出目录/文件必须不存在。训练/验证用于搜索；最终方案确定后才进行测试预测。`evaluate` 需要标签，只用于最终评估。所有词表、编码、缩放和筛选只 fit 相应训练部分；最终可合并训练/验证重训。
+Outputs must not already exist. Search uses training/validation only. Test prediction follows final selection. Evaluation requires labels and is final-only. Vocabulary, encoding, scaling, SVD and filtering fit the appropriate training partition. Final refitting may combine training and validation.
 
-## 批量任务和恢复
+## Batch tasks and recovery
 
 ```bash
 python scripts/workflows/run_released_batch.py --output runs/released_new --max-trials 10
@@ -41,27 +41,27 @@ python scripts/workflows/train_resilient.py --config configs/your_task.json --ou
 python main.py train --config configs/your_task.json --resume-from runs/interrupted --output runs/resumed_new
 ```
 
-批量脚本读取本地 `in_vehicle_coupon_recommendation/` 与 `Released_Task2-Headlines_CTR/`。原始数据不上传 Git；测试数组只在选型重训后转换。上述批量命令默认本地规划，需要真实 LLM 时按 API 指南添加注册表、模型和本地凭据。
+Batch inputs are the local in_vehicle_coupon_recommendation/ and Released_Task2-Headlines_CTR/ directories. Original data is not published. Test arrays are converted only after selection and refitting. The batch command defaults to local planning; enable genuine LLM calls with the registry/model/credential options in the API guide.
 
-扩展参数包括 `--stability-repeats 2`、`--search-patience 6`、`--feature-search`、`--nested-cv-folds 2`、`--enable-minilm`。它们改变成本和搜索空间，不保证提高准确率。嵌套诊断在训练内部进行，不替换课程验证指标。
+Optional flags include --stability-repeats 2, --search-patience 6, --feature-search, --nested-cv-folds 2 and --enable-minilm. They change cost and search allocation, without guaranteeing an accuracy gain. Nested diagnostics remain inside training and do not replace the course validation metric.
 
-恢复绑定同一源码、配置、数据、依赖和原账本；停机时间计入原预算。仅恢复该版本产生的未完成运行，不能用新代码直接接续旧冻结版本。未知 API 消耗不会补零或盲目重放，详细限制见扩展指南。
+Recovery binds the original source, configuration, data, environment and ledger. Downtime counts against the original budget. Only unfinished runs from the same source version can resume. Unknown API usage is never changed to zero or blindly replayed.
 
-## 产物与检查
+## Artifacts and checks
 
-`runs/<运行名>/` 保存模型、预测、trials/events/summary、环境、源码快照、实验记忆和费用快照。最终推理不需要规划 API 密钥；只加载可信来源的模型，并使用对应源码。
+Runs retain models, predictions, trials/events/summary, environment, source snapshots, search memory and usage snapshots. Prediction needs no planner API key. Load only trusted models with their corresponding source.
 
 ```bash
 python -m unittest discover -s tests -v
 python scripts/validation/check_frozen_workflow.py --help
 ```
 
-源码按功能分层；少量根级旧模块只为历史模型兼容保留。旧脚本命令仍有转发入口，新文档使用分层路径。
+Implementation is grouped by responsibility. A few root modules preserve historical pickle imports; old script commands forward to the organized implementations.
 
-## 结果和提交边界
+## Results and submission boundaries
 
-原统一 Pro 开发快照：Coupon 79.07%，Headlines 66.86%。后续双种子及特征专项未超过原模型，本地提交包未替换。这些测试集曾被开发复用，不是独立无偏最终估计；性能分按组间排名计算。
+The original unified Pro development snapshot achieved 79.07% Coupon accuracy and 66.86% Headlines accuracy. Later stability and feature studies did not replace those models. Released test sets were reused during development, so these are not independent unbiased final estimates. Performance marks depend on group rankings.
 
-历史超时用量与平台具体模型修订号仍需核实，报告保留 development draft 标识。报告、模型、源码和日志须来自同一版本；最新扩展不能套用旧报告成绩。AI 使用声明需成员确认。
+Historical timeout usage and deployment revision evidence remain incomplete. The report retains its development-draft status. Source, policy, models, logs and reported results must refer to the same version. New capabilities must not be attributed to old experiments. Members must confirm AI_USAGE.md.
 
-Git 只上传报告 PDF `docs/report/report.pdf` 和 LaTeX 源码；其他 PDF、PPT、`pre/`、课程原始数据、运行产物、凭据及本地提交包均被忽略。
+Only docs/report/report.pdf and its LaTeX sources are published as report material. Other PDFs, presentations, pre/, datasets, credentials, runs and local submission bundles are ignored. Official source evidence is stored as lossless Base64 archives with English metadata; decoded original bytes retain their registered hashes.

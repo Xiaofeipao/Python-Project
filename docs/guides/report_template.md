@@ -1,23 +1,9 @@
-# AIAA 3102 项目报告模板
+# Project Report Checklist
 
-## 1. 系统设计
+1. **System design:** unified entry, inspection, modalities, preprocessing, candidates, feedback, automatic selection/refit, autonomy and task-identity isolation.
+2. **Tasks and data:** input format, sample counts, classes, supplied partitions, designated metric and test isolation.
+3. **Experiments and results:** real trials, validation scores, recorded decisions, final models and test results. Distinguish incomplete tasks and development examples from formal course results.
+4. **Reproducibility and limitations:** final source/policy, commands, dependencies, seeds, environment, resources, search limits, validation bias and failures.
+5. **Contributions and AI use:** actual member contributions and confirmed declarations. Every member must understand the system and experiments.
 
-说明统一入口、数据分析、模态处理、预处理、候选生成、验证反馈、最终模型选择和重训。说明如何实现完整自主运行，以及如何避免按任务名称调用定制方案。
-
-## 2. 任务与数据
-
-逐任务描述输入格式、样本规模、类别、数据划分与指定指标。说明测试集隔离措施。
-
-## 3. 实验过程与结果
-
-从完整执行日志提取主要候选、验证得分、自动改进理由、最终模型和测试结果。标明未完成任务及有效的部分结果；不把开发示例数据成绩当作课程成绩。
-
-## 4. 可复现性与局限
-
-记录最终提交版本、算法策略、运行命令、依赖、随机种子、运行环境和主要资源记录。分析搜索范围、模型能力、验证偏差及执行失败等限制。
-
-## 5. 分工与工具使用
-
-填写组员实际贡献及 AI 工具使用声明。全体成员应能解释系统设计和实验结果。
-
-正式实验完成后导出 `report.pdf`。Unseen Task 不要求额外报告，按课程通知提交预测与日志。
+Export report.pdf after formal experiments. Follow course instructions for unseen predictions and logs; the supplied assignment does not require an additional unseen report.

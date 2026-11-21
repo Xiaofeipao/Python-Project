@@ -1,71 +1,64 @@
-# 目录与职责
+# Architecture and Directory Responsibilities
 
-先看入口和运行控制，再看规划、预处理/模型，最后看评估与审计。
+Read the entry point and runtime first, followed by planning, preprocessing/models, evaluation and governance.
 
 ```text
-main.py                         统一入口
+main.py                             Unified entry point
 superagent/
-  cli.py                        命令解析与分发
-  config.py                     配置及资源边界
+  cli.py                            Command parsing and dispatch
+  config.py                         Typed configuration and resource limits
   runtime/
-    orchestrator.py             实验循环、自动选型、最终重训
-    worker.py                   隔离训练、多种子、失败恢复
-    checkpoint.py               运行锁、恢复验证、预算与账本绑定
+    orchestrator.py                 Experiment loop, selection and refitting
+    worker.py                       Isolated fitting, seeds and failure handling
+    checkpoint.py                   Locks, verified recovery and ledger binding
   planning/
-    search_space.py             通用候选与模型构建
-    llm.py                      上下文、API、提案解析与回退
-    proposals.py                单类修改、参数边界和去重审核
-    memory.py                   候选哈希与模型族统计
+    search_space.py                 Generic candidates and model construction
+    llm.py                          Context, API calls, parsing and fallback
+    proposals.py                    Proposal categories, bounds and deduplication
+    memory.py                       Candidate hashes and family statistics
   preprocessing/
-    datasets.py                 数据、标签、划分与输入哈希
-    transformers.py             缺失值、编码、TF-IDF、SVD、图片表示
-    feature_selection.py        方差、互信息及内存保护
+    datasets.py                     Data loading, partitions, labels and hashes
+    transformers.py                 Imputation, encoding, text, SVD and images
+    feature_selection.py            Variance/MI filters and memory limits
   models/
-    tabular.py                  提升树、融合、成员缓存
-    neural.py                   神经网络、设备和重载
-    text_encoder.py             固定 revision 的 MiniLM
+    tabular.py                      Boosting, blending and member caching
+    neural.py                       Neural training, devices and serialization
+    text_encoder.py                 Fixed-revision MiniLM features
   evaluation/
-    metrics.py                  指标与方向
-    inference.py                模型预测与最终评估
-    nested_cv.py                训练内有限选参嵌套诊断
-    split_overlap.py            训练/验证重叠描述
+    metrics.py                      Metrics and optimization direction
+    inference.py                    Prediction and final evaluation
+    nested_cv.py                    Bounded training-only nested diagnostics
+    split_overlap.py                Descriptive train/validation overlap
   governance/
-    usage_ledger.py             token、费用、预留与预算
-    frozen_bundle.py            冻结、哈希和 Unseen 时间窗
-    test_access.py              配置测试文件的 Python 读取守卫
-  common/json_io.py             原子 JSON 和带时间戳事件
+    usage_ledger.py                 Tokens, prices, reservations and budgets
+    frozen_bundle.py                Source freezing, hashes and unseen deadline
+    test_access.py                  Configured test-file Python audit guard
+  common/json_io.py                 Atomic JSON and timestamped events
 scripts/
-  workflows/                    批量任务、限次自动恢复
-  data/                         NumPy 数据转换
-  api/                          API 连通性检查
-  validation/                   基准、产物和冻结流程检查
-  reporting/                    真实事件生成决策时间线
-tests/
-  contracts/                    接口、课程和费用契约
-  planning/                     搜索、提案与记忆
-  preprocessing/                编码器与特征
-  models/                       表格、文本和神经模型
-  workflows/                    恢复、隔离、数据绑定与端到端行为
-configs/                        示例、固定策略、模型和价格证据
-docs/guides/                    操作与提交说明
-docs/development/               建议复核、扩展和实验边界
-docs/report/                    唯一报告 PDF 及 LaTeX
-examples/                       小规模真实示例证据
+  workflows/                        Batch tasks and bounded automatic recovery
+  data/                             NumPy task conversion
+  api/                              Connectivity probes
+  validation/                       Benchmarks, artifact and freeze checks
+  reporting/                        Timelines derived from actual events
+ tests/                             Contracts, planning, models and workflows
+ configs/                           Examples, policies, registries and evidence
+ docs/guides/                       Operational instructions
+ docs/development/                  Improvement review and experiment limits
+ docs/report/                       Canonical report PDF and LaTeX
+ examples/                          Small real execution examples
 ```
 
-## 一次运行
+## Execution flow
 
-1. 入口读取配置，核对冻结策略、预算和时间窗。
-2. 只读训练/验证，生成输入哈希、环境和重叠统计。
-3. 规划器根据历史提出候选，审核边界和重复项。
-4. 隔离 worker 拟合、验证，记录种子结果、模型族和费用。
-5. 自动选择最终方案，合并训练/验证重训，之后允许测试预测。
-6. 恢复沿父目录保留证据，验证版本、输入和原账本，继续剩余预算。
+1. Parse configuration and verify frozen policy, budget and deadline.
+2. Read training/validation only; record hashes, environment and overlap.
+3. Propose a candidate from feedback and validate its bounds and novelty.
+4. Fit in an isolated worker, measure validation and update memory/usage.
+5. Select automatically, refit on training plus validation, then predict test.
+6. Recover through the parent evidence chain with verified inputs and the original remaining budget.
 
-## 兼容和本地目录
+## Compatibility and local artifacts
 
-根级 `superagent/features.py`、`tabular_models.py`、`torch_models.py`、`embeddings.py`、`selection.py` 只兼容历史 joblib 的类导入路径；新实现位于对应子目录，不在兼容层增加逻辑。
+The root features.py, tabular_models.py, torch_models.py, embeddings.py and selection.py modules preserve historical pickle imports. Their implementations live in subpackages; do not add business logic to these compatibility files. Root script wrappers preserve old command paths.
 
-`scripts/` 根级旧脚本只转发旧命令，便于历史说明继续使用。
-
-`data/`、`runs/`、`.model_usage/`、`.pretrained_cache/`、`releases/`、`submission_*/`、`pre/` 为本地输入、账本、缓存或产物，Git 忽略。课程数据目录保留原路径，避免破坏历史运行配置。
+Local data/, runs/, .model_usage/, .pretrained_cache/, releases/, submission_*/ and pre/ hold inputs, evidence, caches or outputs and are ignored by Git. Course data directories retain their original paths to preserve existing configurations.

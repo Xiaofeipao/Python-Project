@@ -1,15 +1,13 @@
-# AI 工具使用声明
+# AI Usage Declaration
 
-本项目使用 OpenAI Codex 辅助需求解读、代码编写与审阅、调试、测试及文档整理。开发工具与项目运行时调用的模型分别说明；不能从项目 API 账本推断开发工具消耗的 token 或费用。
+OpenAI Codex assisted with requirements interpretation, implementation, review, debugging, testing and documentation. Development tools and runtime planning models are distinct; project API ledgers do not measure Codex token usage or costs.
 
-后续开发实验也测试 DeepSeek-V4-Pro：对应注册表为 `configs/model_registry.pro.json`，官方空闲费率为每百万 token 输入 4.5 元、输出 13.5 元。启用开发专用的保守预留模式时，历史超时的实际用量仍未知，结果会明确标记为不具备正式提交资格；不得将预留金额当作实际扣费，或从最终预测已生成推断核算已完整。
+Runtime planning can use the school platform's DeepSeek-V4.1-Flash or DeepSeek-V4-Pro deployments. The planner receives data summaries and validation feedback, chooses executable candidates and may propose bounded parameter or feature changes. It does not receive test scores or execute generated code. Runs with the LLM disabled or unavailable are not evidence of successful LLM planning.
 
-项目运行时可通过学校平台调用 DeepSeek-V4.1-Flash，用于根据数据统计和已完成实验的验证反馈规划下一项实验。它从可执行候选菜单中选择方案并输出结构化诊断与行动理由，不直接执行生成代码，也不接收测试集或测试成绩。关闭 LLM 的运行不作为 LLM 自主规划证据。
+Registered off-peak accounting rates per million tokens are CNY 1 input / 4 output for Flash, and CNY 4.5 input / 13.5 output for Pro. All input uses the cache-miss rate. These calculated costs are not school-platform invoices; the course must confirm the accepted accounting convention. Registries and hash-checked original evidence are under `configs/`.
 
-模型与价格登记在 `configs/model_registry.json`，官方证据及哈希存于 `configs/evidence/`。按指定的空闲时段口径，所有输入按缓存未命中价格核算：每百万 token 输入 1 元、输出 4 元。该口径不等于学校平台实际扣费；正式课程计费口径以教师要求为准。
+Each run retains actual returned usage, requests/responses, failures and unresolved reservations in usage.jsonl, model_calls/, model_usage.json and summary.json. Unknown usage is not zero. Historical Flash timeouts remain unresolved; provisional development results are not accounting-complete formal submissions. A successful prediction file does not establish complete accounting.
 
-每次运行输出 `usage.jsonl`、`model_calls/`、`model_usage.json`，并在 `summary.json` 的 `model_usage` 汇总实际返回的输入、输出（含接口计入的推理 token）和人民币核算费用。失败及未知用量保留原样，不记作成功或零消耗。`usage.jsonl` 是任务累计账本快照，包含该任务之前尝试的记录。
+The exact school deployment revisions have not been independently confirmed. A publisher release date does not prove the revision behind a platform alias. Verify eligibility before formal submission.
 
-学校接口返回的身份为 `DeepSeek-V4.1-Flash`，尚未独立证明其具体修订号；2026-09-10 发布依据不等于学校部署修订号证明。提交前仍需核实固定版本符合截止日期要求。
-
-组员须自行理解、复核提交代码和结果，并在提交前补充各成员实际使用的其他 AI 工具与用途。本声明不代替成员本人确认。
+All members must understand and verify the code and results, add their actual tools and contributions, and confirm their own declaration. This document does not replace individual confirmation.

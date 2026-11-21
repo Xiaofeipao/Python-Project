@@ -18,14 +18,16 @@
       "deployment_note": "School returns DeepSeek-V4-Pro; exact revision not independently attested",
       "evidence": [
         {
-          "snapshot": "evidence/pro_20260813_prices.png",
+          "snapshot": "evidence/pro_20260813_prices.png.base64.json",
           "official_url": "https://api-docs.deepseek.com/zh-cn/img/v4_260813_price_cn.png",
-          "sha256": "b4221d365153bb0c459979f162e7703b014c7ee812c570e3b68c1e1558d78b4a"
+          "sha256": "b4221d365153bb0c459979f162e7703b014c7ee812c570e3b68c1e1558d78b4a",
+          "encoding": "base64"
         },
         {
-          "snapshot": "evidence/pro_limits.html",
+          "snapshot": "evidence/pro_limits.html.base64.json",
           "official_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
-          "sha256": "c85eeb649ff392593ad0048babcbf63d73b3e6f05cbb2626808927618c01cb7b"
+          "sha256": "c85eeb649ff392593ad0048babcbf63d73b3e6f05cbb2626808927618c01cb7b",
+          "encoding": "base64"
         }
       ],
       "official_output_limit_tokens": 393216

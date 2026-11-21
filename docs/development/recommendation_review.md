@@ -1,53 +1,51 @@
-# 原建议逐项复核
+# Review of Every Proposed Improvement
 
-所有建议均已逐条复核。**看过不等于全部实现或已经证明有效**：以下区分已实现、限定实现、诊断和未采纳。实现文件路径如 `planning/`、`evaluation/` 均位于 `superagent/` 下；`scripts/` 等路径以仓库根目录为准。
+Every suggestion was reviewed. Reviewed does not mean fully implemented or proven effective. Implementation paths below are relative to superagent/ unless scripts/ is specified.
 
-## Agent 与规划（原第 1–9 条）
+## Agent and planner: suggestions 1-9
 
-1. **实验哈希记忆：已实现。** `planning/memory.py` 保存当前运行的模型族/参数哈希；菜单排除已试候选，`proposals.py` 再次拒绝重复执行。独立新实验可以有意复现实验，不跨不同数据集共用去重池。
-2. **单变量约束：限定实现为单类修改。** 一次覆盖只改特征或超参数一类；同类可能包含多字段。因此不声称所有实验都是严格单参数因果消融。
-3. **模型族状态与资源：已实现启发式。** 最佳、均值、标准差、失败次数和耗时进入摘要；失败或持续较差的族可退出本轮候选，保留探索轮次。不是经过最优性证明的资源调度。
-4. **平台期与种子波动：已实现描述性测量。** `stability_repeats` 记录每种子成绩、均值、标准差。它不能估计验证划分不确定性；集成内部种子也可能相关，不报告统计显著性。
-5. **压缩上下文：已实现。** 最近五轮、最佳方案、模型族摘要和拒绝原因；过长时缩短本轮菜单，而非塞完整日志。
-6. **Few-shot：已实现两个结构化示例。** 字段和代码审核仍是执行依据；API 不可用的运行不能证明示例提升了解析率。
-7. **候选清单：已实现当前决策菜单。** choice 必须指向清单，覆盖必须符合边界。不是一次枚举所有可能的超参数组合，也不允许任意新模型代码。
-8. **拒绝反馈：已实现。** 非法/重复原因入事件并进入下一轮上下文；有效计划清除旧拒绝状态。
-9. **连续 fallback 反思：限定实现。** 连续无效 JSON 后退出本轮 API 规划，采用确定性搜索；未额外调用大模型反思分支。网络不可用会独立记录并回退。
+1. **Trial hashes: implemented.** planning/memory.py records current-run family/parameter combinations. Menus exclude tried candidates; proposals.py checks again before execution. Independent reproducibility runs may intentionally repeat an experiment.
+2. **Single-variable proposals: implemented as one change category.** A proposal changes features or hyperparameters, not both. Multiple fields within one category are possible, so this is not always a strict one-parameter causal ablation.
+3. **Family statistics/allocation: heuristic implemented.** Best/mean/std, failures and elapsed time guide allocation and retirement, with exploration rounds. No optimality claim is made.
+4. **Plateau versus seed fluctuation: descriptive measurements implemented.** stability_repeats records seeds, scores, means and standard deviations. This does not measure split uncertainty; ensemble seeds can be correlated. No significance claim is made.
+5. **Compact context: implemented.** Recent five trials, best candidate, family summaries and rejection feedback replace full histories. Oversized contexts reduce the current executable menu.
+6. **Few-shot examples: two implemented.** Parsing and validation remain authoritative. Offline/local-fallback runs do not establish improved real-model output reliability.
+7. **Candidate list: current decision menu implemented.** Choices must reference it and overrides must obey rules. This does not enumerate an infinite parameter space or allow arbitrary model code.
+8. **Rejected-proposal feedback: implemented.** Reasons enter logs and subsequent context. Accepted plans clear stale rejection state.
+9. **Fallback reflection: bounded implementation.** Repeated invalid JSON disables API planning for the run. Network failures are recorded separately. No extra paid reflection-model branch was added.
 
-## 稳定性和泛化（原第 10–13 条）
+## Stability and generalization: suggestions 10-13
 
-10. **多种子稳定性：同第 4 条。** 单轮最高种子不作为最终选型依据；启用重复时使用验证均值。
-11. **泛化风险：部分实现。** `evaluation/split_overlap.py` 描述训练/验证完全重复行与标准化重复标题。没有可靠时间/来源组别元数据，不臆造时间分层，不更改课程官方划分。未发现完全重复不等于排除近重复或其他泄漏。
-12. **方差惩罚：未硬编码任意惩罚。** 将标准差提供给规划器，保留验证均值选型。两个种子不足以给出泛化置信区间，不把某个随意罚项包装成可靠统计结论。
-13. **嵌套 CV：限定实现。** `evaluation/nested_cv.py` 在训练子样本上执行内层两个 C 值选择、外层评估。它是辅助诊断，不是完整 AutoML 的嵌套评估，也不替代官方验证/测试指标。
+10. **Multi-seed stability:** as in item 4. Enabled selection uses validation means, not the best seed.
+11. **Generalization risk: partial diagnostic.** evaluation/split_overlap.py reports exact feature-row and normalized-title overlap. Reliable time/source metadata is unavailable, so no chronology is invented and official partitions remain unchanged. Zero exact overlap does not exclude semantic near-duplicates or other leakage.
+12. **Variance penalty: no arbitrary fixed penalty.** Standard deviations are provided to planning; validation means remain the selection criterion. Two seeds cannot justify a generalization confidence interval.
+13. **Nested CV: bounded implementation.** evaluation/nested_cv.py performs inner selection between two C values and outer evaluation on a training subsample. This is not nested evaluation of the complete AutoML search and does not replace official validation/test metrics.
 
-## 特征（原第 14–15 条）
+## Feature engineering: suggestions 14-15
 
-14. **可配置组件：已实现。** `preprocessing/transformers.py` 支持填充、one-hot/ordinal、文本 n-gram、min_df、max_features、IDF、binary 和可选停用词；`planning/proposals.py` 检查参数范围与模态适用性。
-15. **过滤特征：已实现方差/互信息候选。** `preprocessing/feature_selection.py` 只 fit 训练数据，限制稠密内存；文本互信息候选可先用训练内 SVD。失败有记录，不保证筛选更好。
+14. **Configurable components: implemented.** preprocessing/transformers.py supports imputation, one-hot/ordinal encoding, n-grams, min_df, max_features, IDF, binary features and optional stopwords. Proposals validate bounds and modality applicability.
+15. **Filtering: variance and MI implemented.** Filters fit training data only, with a dense-memory bound. Multi-column text MI candidates can use training-fitted SVD. Failures are logged; improvement is not guaranteed.
 
-## 测试隔离（原第五节）
+## Test isolation: original section five
 
-16. **读取守卫：限定实现。** `governance/test_access.py` 用 Python audit hook 阻止配置的 test_csv 在当前训练解释器选型前打开。不是跨进程 OS 沙箱，不覆盖恶意原生代码或任意别名路径。
-17. **时间证据：已有但有范围。** 配置测试输入的训练入口记录 selection_completed、test_read_started 精确时间戳。批量数组转换按训练结束后执行；不声称对系统每次文件读取都有全局审计。
-18. **训练内拟合：已有并有测试。** 缩放、词表、编码、筛选、SVD 随 pipeline 在对应训练部分 fit；嵌套 CV 每折重建模型。最终训练加验证的重训与测试统计严格区分。
+16. **Read guard: bounded implementation.** governance/test_access.py blocks the configured test_csv in the current Python training interpreter before selection. It is not an OS sandbox for native code, other processes or arbitrary file aliases.
+17. **Timing evidence: scoped implementation.** Configured final prediction logs selection_completed and test_read_started timestamps. Batch conversion follows completed training, but not every OS file access is globally logged.
+18. **Train-only fitting: implemented and tested.** Scaling, vocabularies, encoding, selection and SVD fit each appropriate training partition. Nested folds rebuild models. Final train-plus-validation refitting remains distinct from test statistics.
 
-## 账本与恢复（原第六节）
+## Accounting and recovery: original section six
 
-19. **API 自动重试：未实现指数退避。** 未知消耗保留预算，不补零，不自动重放中断请求。恢复后的第一个新决策本地执行，后续新请求仍独立记账。训练进程的限次重启不等于 HTTP 请求重试。
-20. **版本绑定：已加强。** 环境记录 Python、主要库及全部安装分发版本；每轮引用环境和源码哈希。恢复核对原源码、配置、数据、依赖及账本。
-21. **断点续跑：已实现。** `runtime/checkpoint.py` 与 `scripts/workflows/train_resilient.py` 支持限次自动恢复到新目录，重建 trial_memory/模型族，保留结构化反思和父目录链。停机时间计入原预算；同版本未完成运行才能恢复。真实进程故障注入已验证原账本保持不变。
+19. **API exponential-backoff retries: not implemented.** Unknown usage retains its reservation and is never silently replayed. The first restored decision is local. Bounded training-process restarts are not HTTP-request retries.
+20. **Version binding: strengthened.** Environment records include Python, main libraries and installed distributions. Trials reference source/environment evidence. Recovery verifies code, policy, data, dependencies and the original ledger.
+21. **Recovery: implemented.** runtime/checkpoint.py and scripts/workflows/train_resilient.py restore to new audit directories, rebuild trial/family memory, retain structured reflections and parent evidence, and count downtime. Only unfinished same-version runs can resume. Controlled process termination verified automatic completion and unchanged ledger paths.
 
-## 停止策略（原第七节）
+## Stopping: original section seven
 
-22. **停滞提前停止：已实现可选 patience。** 至少八轮后，连续指定轮数未提高验证均值可停止。真实 Headlines 双种子运行第九轮触发；这只是搜索启发式，不证明已经找到上限。
-23. **候选退出/耗尽：已实现。** 连续失败的族从菜单退出，当前可执行空间耗尽则结束。模型族统计不跨不同任务永久封禁算法。
-24. **费用与时间闸门：已实现。** 费用包含历史未知预留和下一次最坏情况请求；时间留出最终重训，Unseen 窗口不因重启重置。历史用量尚未核销的结果仍是开发产物。
+22. **Patience: optional implementation.** After at least eight trials, a configured interval without validation-mean improvement can stop search. The real Headlines stability run stopped at trial nine. This is a heuristic, not proof of an optimum.
+23. **Family retirement/exhaustion: implemented.** Failed families leave the current menu and exhausted eligible search ends. Algorithms are not permanently banned across unrelated tasks.
+24. **Cost/time gates: implemented.** Historical unknown holds and the next worst-case request count against the task budget. Final refitting receives reserved time; restarting never resets the unseen window. Unreconciled runs remain development artifacts.
 
-## 已有证据和未证明的部分
+## Evidence and limits
 
-- 本地 `runs/memory_stability_20261120/`：两项双种子搜索；Headlines 提前停止生效，准确率未超过旧提交模型。
-- 本地 `runs/feature_nested_20261120/`：四轮线性特征专项，包含真实嵌套诊断；不是完整十轮搜索空间的对照。
-- 本地 `runs/resume_fault_probe_20261120_v2/verification.json`：受控进程中断、自动完成恢复、原账本路径不变。
-- 原报告仍基于 2026-11-16 冻结快照。后续 API 连通性不稳定，没有把本地回退叙述为真实 LLM 决策，也没有证据说明这些工程增强必然提高准确率。
-- 运行产物和数据保留本地不上传；代码、测试和审阅说明可在仓库中复核。当前新旧模型仍需按各自源码版本使用。
+Local runs/memory_stability_20261120/ contains two-seed searches and actual early stopping. runs/feature_nested_20261120/ contains the four-trial linear feature study and nested diagnostics, not a matched full-search comparison. runs/resume_fault_probe_20261120_v2/verification.json records real process interruption and successful automatic recovery.
+
+The report still describes the 2026-11-16 frozen snapshot. Later local fallback was not presented as real LLM planning, and no accuracy improvement was established. Data and run artifacts remain local; repository code and tests support independent review.

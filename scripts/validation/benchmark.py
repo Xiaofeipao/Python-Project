@@ -36,14 +36,14 @@ def prepare(destination):
     paths["tabular"] = tabular
     rng = np.random.default_rng(41)
     vocab = {
-        "science": ["physics", "atom", "lab", "科学", "实验", "研究"],
-        "sport": ["match", "team", "goal", "足球", "比赛", "运动"],
-        "food": ["recipe", "cook", "taste", "烹饪", "美食", "厨房"],
+        "science": ["physics", "atom", "lab", "science", "experiment", "research"],
+        "sport": ["match", "team", "goal", "football", "competition", "athletics"],
+        "food": ["recipe", "cook", "taste", "cooking", "cuisine", "kitchen"],
     }
     texts = []
     for index in range(900):
         label = list(vocab)[index % 3]
-        tokens = rng.choice(vocab[label], 5).tolist() + rng.choice(["today", "news", "讨论", "分享"], 4).tolist()
+        tokens = rng.choice(vocab[label], 5).tolist() + rng.choice(["today", "news", "discussion", "sharing"], 4).tolist()
         rng.shuffle(tokens)
         texts.append({"text": " ".join(tokens), "label": label})
     paths["text"] = pd.DataFrame(texts)
