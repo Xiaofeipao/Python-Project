@@ -53,12 +53,31 @@ Two further attempts were interrupted mid-run and are kept only as charge record
 
 Best versions (`runs/best.json`): `coupon-gpu-20261123` and `headlines-gpu-20261123`, chosen because they reach the same held-out score as the longer searches at the lowest recorded cost.
 
+## Accuracy-enrichment probe — capability flags and seed variance
+
+Two capabilities were switched off in every earlier run, so the planner never saw them: `enable_minilm` (MiniLM sentence embeddings feeding a logistic head) and `enable_feature_search` (variance and mutual-information filters). Three runs turned both on and additionally set `stability_repeats=3`, which scores each trial as the mean of three training seeds instead of one.
+
+| Run | config | trials | validation | held-out test | LLM calls | cost (CNY) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `coupon-minilm2-20261123` | flags on, 3-seed validation | 12 | 0.758785 | 0.791486 | 11 | 0.059672 |
+| `headlines-minilm2-20261123` | flags on, 3-seed validation, seed 42 | 12 | 0.684043 | 0.670483 | 11 | 0.076654 |
+| `headlines-minilm3-20261123` | identical to the row above, seed 7 | 12 | 0.690426 | 0.660582 | 11 | 0.067790 |
+
+What the three runs establish:
+
+- **MiniLM loses to n-gram features on this task.** Its three candidates scored 0.668085, 0.668085 and 0.671277 on validation and were never selected; the winning family stayed inside the same TF-IDF space.
+- **The coupon plateau is structural.** All 12 candidates stayed between 0.7547 and 0.7588 validation on the same `cross_boost_blend` point, so the +0.08 pt test difference (2008 vs 2006 correct rows) is two rows of noise.
+- **The headlines "+1 pt" is seed variance.** The seed-42 run reached 0.670483, but the paired seed-7 control with the same policy returned exactly 0.660582 — the baseline number, bit for bit, with a different selected trial. The seed-driven spread on this 3232-row test set is therefore about ±1 pt, which is the size of the effect the earlier attempts were chasing.
+- **Three-seed validation alone does not help.** Averaging validation seeds gave a lower, more honest validation number (0.684043 versus 0.690426) but did not change the selected family; the deployed model is still a single fit, so test-time variance is untouched.
+
+An earlier attempt in this batch (`headlines-minilm-20261123`) put the two flags in the policy file instead of the task config, so they never reached the profile; it was stopped after 8 trials and its directory removed. Its CNY 0.049710 charge stays in the ledger as an Aborted-flag misconfiguration record.
+
+Because the paired control shows no systematic gain, the reported experiments stay at `coupon-gpu-20261123` (0.790698) and `headlines-gpu-20261123` (0.660582). The three probe runs are disclosed as exploration, not as a new best; picking the 0.670483 seed would be selecting on the test set, which the protocol forbids.
+
 ## Totals and record policy
 
-The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds and the two interrupted attempts, the disclosed 2026-11-23 GPU usage is **CNY 0.532050** across twelve runs, all accounting-complete with no reservation held.
+The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts and the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt), the disclosed 2026-11-23 GPU usage is **CNY 0.785876** across sixteen runs, all accounting-complete with no reservation held.
 
 These replace every earlier interim record: `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so only the runs in this log are reported as experiments.
-
-Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
 
 Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
