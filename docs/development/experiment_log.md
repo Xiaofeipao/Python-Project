@@ -74,9 +74,25 @@ An earlier attempt in this batch (`headlines-minilm-20261123`) put the two flags
 
 Because the paired control shows no systematic gain, the reported experiments stay at `coupon-gpu-20261123` (0.790698) and `headlines-gpu-20261123` (0.660582). The three probe runs are disclosed as exploration, not as a new best; picking the 0.670483 seed would be selecting on the test set, which the protocol forbids.
 
+## Seed-averaged final fit — implemented, measured, reverted
+
+The one lever that looked promising on theory was seed averaging: keep several refits of the selected candidate on train+validation and average their probabilities, which should trade a little bias for a lot of variance. It was implemented as `final_fit_seeds` (default 1, so the previous behaviour stays byte-identical), the worker refits `2..5` members under `seed + 101*i`, and a `SeedAveragedModel` wrapper averages `predict_proba` with class-order checks. All 63 tests passed.
+
+| Run | runtime | trials | validation | held-out test | per-seed test | cost (CNY) |
+| --- | --- | --- | --- | --- | --- | --- |
+| `coupon-ens-20261123` | `b85ff720…` | 6 | 0.759606 | 0.787544 | 0.790698 / 0.786756 / 0.788727 / 0.786756 / 0.785968 | 0.025366 |
+| `headlines-ens-20261123` | `b85ff720…` | 10 | 0.690426 | 0.660582 | 0.660582 for all five | 0.057801 |
+
+Two outcomes killed the idea:
+
+- **Headlines has no seed variance to average away.** Every refit of the char-ngram logistic returns exactly 0.660582, so the ensemble is arithmetically identical to the single fit.
+- **Coupon's seeds span 0.785968–0.790698 and the average lands at the mean, 0.787544.** The ensemble does not add accuracy; it gives up the lucky seed-42 draw. With members within half a point of each other there is nothing to exploit — the candidate itself is at its plateau.
+
+The change was therefore reverted in the working tree (`b8d38fb` keeps the implementation for reference), which restores the frozen runtime to `98bf60ef…`, the hash both reported experiments were frozen with. Running it would otherwise have forced a re-freeze and a rerun of both tasks for no accuracy gain.
+
 ## Totals and record policy
 
-The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts and the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt), the disclosed 2026-11-23 GPU usage is **CNY 0.785876** across sixteen runs, all accounting-complete with no reservation held.
+The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts, the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt) and the two seed-averaged runs (0.083167), the disclosed 2026-11-23 GPU usage is **CNY 0.869043** across eighteen runs, all accounting-complete with no reservation held.
 
 These replace every earlier interim record: `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so only the runs in this log are reported as experiments.
 
