@@ -35,6 +35,31 @@ def endpoint(base_url):
     return base_url.rstrip("/") + "/chat/completions"
 
 
+def parse_plan_response(payload):
+    """Parse a complete provider reply without repairing or inventing a plan."""
+    choices = payload.get('choices')
+    if not isinstance(choices, list) or not choices:
+        raise ValueError('Provider returned no choices')
+    first = choices[0]
+    if not isinstance(first, dict):
+        raise ValueError('Provider returned an invalid choice')
+    if first.get('finish_reason') == 'length':
+        raise ValueError('LLM output truncated: finish_reason=length')
+    message = first.get('message')
+    if not isinstance(message, dict):
+        raise ValueError('Provider returned no message object')
+    content = message.get('content')
+    if not isinstance(content, str) or not content.strip():
+        raise ValueError('LLM returned empty or non-text content')
+    try:
+        selection = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f'LLM returned invalid JSON: {exc.msg}') from exc
+    if not isinstance(selection, dict):
+        raise ValueError('LLM response must be a JSON object')
+    return selection
+
+
 def candidate_menu(profile, history, metric, limit=6):
     planning = list(history)
     menu = []
@@ -211,6 +236,8 @@ class AutonomousPlanner:
             response_path = folder / f"{call['call_id']}.response.json"
             response_path.write_bytes(payload)
             parsed = json.loads(payload)
+            if not isinstance(parsed, dict):
+                raise UsageUncertain('Provider response must be a JSON object')
             if parsed.get("model") not in self.model["response_model_ids"]:
                 raise UsageUncertain("Provider returned a model identity outside the pinned registry")
             usage = parsed.get("usage")
@@ -224,8 +251,7 @@ class AutonomousPlanner:
             if record["status"] != "recorded":
                 raise UsageUncertain("Actual token usage exceeded the registered reservation bounds")
             try:
-                content = parsed["choices"][0]["message"]["content"]
-                selection = json.loads(content)
+                selection = parse_plan_response(parsed)
                 if any(not isinstance(selection.get(k), str) or not selection[k].strip()
                        for k in ('diagnosis', 'next_action')):
                     raise ValueError('Planning requires structured diagnosis and next_action')
@@ -239,7 +265,8 @@ class AutonomousPlanner:
                     raise ValueError('New parameter proposals require a testable hypothesis and success criterion')
                 if candidate_key(proposed) in {candidate_key(item["candidate"]) for item in history}:
                     raise ValueError("Model selected an already executed candidate")
-                explanation = str(selection.get("reason", ""))[:2000]
+                explanation = str(selection.get("reason") or selection.get("diagnosis")
+                                  or selection.get("next_action") or "")[:2000]
             except (ValueError, TypeError, KeyError, IndexError) as rejected:
                 self._last_rejection = str(rejected)
                 self._invalid_plans = getattr(self, '_invalid_plans', 0) + 1

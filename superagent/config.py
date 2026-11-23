@@ -48,8 +48,12 @@ class TaskConfig:
     llm_base_url: str | None = None
     llm_api_key_env: str = "HKUST_API_KEY"
     llm_agent_id: str = "planner"
-    llm_max_output_tokens: int = 512
-    llm_timeout_seconds: float = 60
+    llm_max_output_tokens: int = 4096
+    # A non-streaming 4096-token reply (including reasoning tokens) can take
+    # well over 60 s on the school deployment: measured 46.8 s for 1679 tokens
+    # and a hard timeout at 60 s for longer replies. 180 s keeps the whole
+    # reply inside one read window without retries.
+    llm_timeout_seconds: float = 180
     llm_budget_rmb: str = "20"
     progressive_output: bool = False
     max_cost_rmb: str = '15'

@@ -1,3 +1,4 @@
+import importlib.util
 import unittest
 import numpy as np
 import pandas as pd
@@ -64,6 +65,8 @@ class MultiTextTests(unittest.TestCase):
         self.assertEqual(fixed, model.vectorizer_.vocabulary_)
 
     def test_xgboost_gpu_with_string_classes_and_cpu_inference(self):
+        if importlib.util.find_spec('torch') is None:
+            self.skipTest('torch is not installed (requirements-gpu.txt)')
         import torch
         if not torch.cuda.is_available():
             self.skipTest('CUDA unavailable')
@@ -74,6 +77,8 @@ class MultiTextTests(unittest.TestCase):
         np.testing.assert_allclose(model.predict_proba(X).sum(axis=1), 1)
 
     def test_cross_boost_pipeline_roundtrip(self):
+        if importlib.util.find_spec('torch') is None:
+            self.skipTest('torch is not installed (requirements-gpu.txt)')
         import torch, tempfile, joblib
         from pathlib import Path
         from superagent.planning.search_space import build_model

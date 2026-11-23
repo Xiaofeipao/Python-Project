@@ -46,6 +46,6 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 
 ## Evidence and limits
 
-Local runs/memory_stability_20261120/ contains two-seed searches and actual early stopping. runs/feature_nested_20261120/ contains the four-trial linear feature study and nested diagnostics, not a matched full-search comparison. runs/resume_fault_probe_20261120_v2/verification.json records real process interruption and successful automatic recovery.
+Local runs/_archive_20261123/memory_stability_20261120/ contains two-seed searches and actual early stopping. runs/_archive_20261123/feature_nested_20261120/ contains the four-trial linear feature study and nested diagnostics, not a matched full-search comparison. runs/_archive_20261123/resume_fault_probe_20261120_v2/verification.json records real process interruption and successful automatic recovery.
 
 The report still describes the 2026-11-16 frozen snapshot. Later local fallback was not presented as real LLM planning, and no accuracy improvement was established. Data and run artifacts remain local; repository code and tests support independent review.

@@ -5,7 +5,9 @@ One system selects classification methods using training data, resources and val
 ## Start here
 
 - [Architecture and directory responsibilities](docs/architecture.md)
+- [Commands for running SuperAgent](docs/guides/quickstart.md)
 - [Review of every proposed improvement](docs/development/recommendation_review.md)
+- [Experiment log](docs/development/experiment_log.md)
 - [Advanced features and experiment history](docs/development/advanced_usage.md)
 - [API setup](docs/guides/api_usage.md) and [formal evaluation workflow](docs/guides/full_assignment_workflow.md)
 - [English report and LaTeX source](docs/report/README.md)

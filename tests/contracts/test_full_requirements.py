@@ -164,6 +164,7 @@ class FormalRequirements(unittest.TestCase):
         output = self.root / "run"
         output.mkdir()
         config = TaskConfig(train_csv="unused", target_column="label", llm_mode="required",
+                            llm_max_output_tokens=512,
                             llm_registry=str(self.registry), llm_model_id=self.model["model_id"],
                             llm_base_url="http://127.0.0.1:1/v1")
         history = [{"candidate": {"family": "dummy"}, "status": "success", "score": 0.5}]

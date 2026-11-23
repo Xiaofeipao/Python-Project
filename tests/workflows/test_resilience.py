@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import tempfile
 import unittest
@@ -45,6 +46,8 @@ class ResilienceTests(unittest.TestCase):
             self.assertFalse((root/'run/partial').exists())
 
     def test_oom_reduces_batch_then_uses_cpu(self):
+        if importlib.util.find_spec('torch') is None:
+            self.skipTest('torch is not installed (requirements-gpu.txt)')
         model, steps = fit_with_fallback(AllocationFailure(), [[1]], [0])
         self.assertEqual(model.device, 'cpu')
         self.assertEqual(len(steps), 2)

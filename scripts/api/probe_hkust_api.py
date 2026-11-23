@@ -26,8 +26,10 @@ from superagent.planning.llm import NoRedirects, endpoint
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="https://aigc-api.hkust-gz.edu.cn/api/v2")
-    parser.add_argument("--model", default="DeepSeek-V4-Pro")
+    parser.add_argument("--model", default="DeepSeek-V4.1-Flash")
     parser.add_argument("--key-file", type=Path)
+    parser.add_argument("--timeout", type=float, default=180,
+                        help="Read timeout in seconds; a 4096-token non-streaming reply can exceed 60 s")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     secret = os.environ.get("HKUST_API_KEY")
@@ -49,7 +51,7 @@ def main():
                       headers={"Content-Type": "application/json", "Authorization": "Bearer " + secret})
     started = time.monotonic()
     try:
-        with build_opener(NoRedirects()).open(request, timeout=60) as response:
+        with build_opener(NoRedirects()).open(request, timeout=args.timeout) as response:
             report["http_status"] = response.status
             raw = response.read(8 * 1024 * 1024 + 1)
         if len(raw) > 8 * 1024 * 1024:

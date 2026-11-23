@@ -11,8 +11,8 @@
   "llm_base_url": "https://aigc-api.hkust-gz.edu.cn/api/v2",
   "llm_api_key_env": "HKUST_API_KEY",
   "llm_agent_id": "planner",
-  "llm_max_output_tokens": 512,
-  "llm_timeout_seconds": 60,
+  "llm_max_output_tokens": 4096,
+  "llm_timeout_seconds": 180,
   "llm_budget_rmb": "20",
   "progressive_output": false
 }

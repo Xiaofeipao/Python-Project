@@ -283,23 +283,68 @@ class UsageLedger:
             append_json(self.directory / "calls.jsonl", call)
             return call
 
+    def reconcile_unknown(self, call_id, basis, evidence, reconciled_by="usage-reconciliation"):
+        """Close an unrecorded call as an explicit conservative charge.
+
+        A read timeout proves the request reached the provider but not that it
+        generated nothing. Token usage is therefore unrecoverable. This books the
+        worst-case reservation as a stated upper bound instead of inventing token
+        counts or assuming a zero-cost call, and leaves ``accounting_complete``
+        False: the charge is bounded, the actual usage is still unknown, so the
+        run stays ineligible for formal submission.
+        """
+        if not isinstance(basis, str) or not basis.strip():
+            raise ValueError("Reconciliation requires a stated basis")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise ValueError("Reconciliation requires original evidence (path or record id)")
+        with self.locked():
+            state = self._read()
+            call = next((item for item in state["calls"] if item["call_id"] == call_id), None)
+            if call is None:
+                raise ValueError("Unknown call_id in this task ledger")
+            if call["status"] not in {"usage_unknown", "pending"}:
+                raise ValueError("Only unrecorded calls can be reconciled")
+            reserved = amount(call["reserved_rmb"])
+            call.update(status="reconciled_conservative", cost_rmb=str(reserved),
+                        accounting_complete=False,
+                        usage_basis=("Provider token usage was never returned; the worst-case "
+                                     "reservation is booked as an upper bound, not as actual usage"),
+                        reconciliation={"basis": basis.strip(), "evidence": evidence.strip(),
+                                        "conservative_charge_rmb": str(reserved),
+                                        "actual_usage": "unrecoverable",
+                                        "reconciled_by": reconciled_by,
+                                        "timestamp_utc": datetime.now(timezone.utc).isoformat()})
+            write_json(self.path, state)
+            append_json(self.directory / "calls.jsonl", call)
+            return call
+
     def summary(self):
         with self.locked():
             state = self._read()
-        known = sum((amount(call["cost_rmb"]) for call in state["calls"] if call.get("cost_rmb") is not None), Decimal(0))
-        held = sum((amount(call["reserved_rmb"]) for call in state["calls"]
+        calls = state["calls"]
+        known = sum((amount(call["cost_rmb"]) for call in calls
+                     if call.get("cost_rmb") is not None and call["status"] == "recorded"), Decimal(0))
+        conservative = sum((amount(call["cost_rmb"]) for call in calls
+                            if call.get("cost_rmb") is not None and call["status"] == "reconciled_conservative"),
+                           Decimal(0))
+        held = sum((amount(call["reserved_rmb"]) for call in calls
                     if call["status"] in {"pending", "usage_unknown"}), Decimal(0))
-        complete = all(call.get("accounting_complete", False) for call in state["calls"])
-        inputs = sum(call.get("input_tokens", 0) for call in state["calls"])
-        outputs = sum(call.get("output_tokens", 0) for call in state["calls"])
+        reconciled = sum(1 for call in calls if call["status"] == "reconciled_conservative")
+        complete = all(call.get("accounting_complete", False) for call in calls)
+        inputs = sum(call.get("input_tokens", 0) for call in calls)
+        outputs = sum(call.get("output_tokens", 0) for call in calls)
         return {"evaluation_id": self.evaluation_id, "budget_rmb": str(self.budget),
-                "actual_recorded_cost_rmb": str(known), "unreconciled_reserved_rmb": str(held),
+                "actual_recorded_cost_rmb": str(known),
+                "conservative_reconciled_cost_rmb": str(conservative),
+                "charged_total_cost_rmb": str(known + conservative),
+                "reconciled_call_count": reconciled,
+                "unreconciled_reserved_rmb": str(held),
                 "actual_total_cost_rmb": str(known) if complete else None,
-                "call_count": len(state["calls"]),
+                "call_count": len(calls),
                 "recorded_input_tokens": inputs, "recorded_output_tokens": outputs,
                 "input_tokens": inputs if complete else None, "output_tokens": outputs if complete else None,
                 "accounting_complete": complete,
-                "within_budget": known + held <= self.budget,
+                "within_budget": known + conservative + held <= self.budget,
                 "ledger_path": str(self.path), "requires_all_agents_to_share_ledger": True}
 
     def audit_records(self):
