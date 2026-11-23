@@ -1,58 +1,43 @@
 # Experiment log
 
-Both reported experiments were run on 2026-11-23 with the same frozen runtime (`runtime_sha256 = 98bf60ef…48a68c`), after the LLM planning path was fixed (180 s read timeout, hardened malformed-plan parsing, explicit reconciliation of unrecoverable usage). They replace the earlier exploratory runs, which are no longer counted as experiments.
+Both reported experiments were run on 2026-11-23 on the RTX 5060 Ti (`gpu-pytorch`, torch 2.12.1+cu132) with the same frozen runtime (`runtime_sha256 = 98bf60ef…48a68c`), after the LLM planning path was fixed (180 s read timeout, hardened malformed-plan parsing, explicit reconciliation of unrecoverable usage). Both finished with `status=completed`, a full prediction file and an accounting-complete ledger.
 
-## Experiment 1 — coupon-v2-20261123 (development, GPU)
+## Experiment 1 — coupon-gpu-20261123 (development, GPU)
 
 | Item | Value |
 | --- | --- |
-| evaluation_id | `coupon-v2-20261123` |
+| evaluation_id | `coupon-gpu-20261123` |
 | data | in-vehicle coupon, 21 features: train 8117 / val 2030 / test 2537 |
-| compute | `gpu-pytorch` env, torch 2.12.1+cu132, RTX 5060 Ti; xgboost members on CUDA |
+| compute | `gpu-pytorch` env, `device=auto` → CUDA available; xgboost members on GPU |
 | search | 4 trials, every non-baseline choice decided by the LLM planner |
-| selected | trial 2, `cross_boost_blend` |
-| validation | 0.758128078817734 |
-| held-out test | **accuracy 0.7922743397713835** (2010/2537), macro F1 0.785772, weighted F1 0.790877 |
-| LLM calls | 3 recorded, 3933 input / 3728 output tokens |
-| cost | **CNY 0.018845**, accounting complete, no unreconciled reservation |
+| selected | trial 4, `cross_boost_blend` |
+| validation | 0.7596059113300493 |
+| held-out test | **accuracy 0.7906976744186046** (2006/2537), macro F1 0.784146, weighted F1 0.789289 |
+| LLM calls | 3 recorded, 3915 input / 2579 output tokens |
+| cost | **CNY 0.014231**, accounting complete, no unreconciled reservation |
 
-## Experiment 2 — headlines-v2-20261123 (development, CPU)
+Trial history: dummy 0.568473 → `cross_boost_blend` 0.758128 → 0.757143 → **0.759606 (selected)**.
+
+## Experiment 2 — headlines-gpu-20261123 (development, GPU host, sklearn model)
 
 | Item | Value |
 | --- | --- |
-| evaluation_id | `headlines-v2-20261123` |
+| evaluation_id | `headlines-gpu-20261123` |
 | data | headline pair preference (`label_pairwise`): train 8301 / val 940 / test 3232 |
-| compute | `cpu-pytorch` env, `device=cpu`, `enable_torch=false`, profile `standard` |
-| search | 6 trials, all chosen by the LLM planner |
+| compute | `gpu-pytorch` env, `device=auto`, `enable_torch=true`, mixed precision ready; the selected model is sklearn, so it executes on CPU |
+| search | 10 trials, all chosen by the LLM planner (one malformed plan was rejected and re-planned) |
 | selected | trial 2, logistic regression on character n-grams, separate representation, balanced |
-| validation | 0.6882978723404255 |
-| held-out test | **accuracy 0.6599628712871287** (2133/3232), macro F1 0.659943, weighted F1 0.659899 |
-| LLM calls | 5 recorded, 7795 input / 4690 output tokens |
-| cost | **CNY 0.026555**, accounting complete, no unreconciled reservation |
+| validation | 0.6904255319148936 |
+| held-out test | **accuracy 0.6605816831683168** (2135/3232), macro F1 0.660564, weighted F1 0.660524 |
+| LLM calls | 9 recorded, 16120 input / 10168 output tokens |
+| cost | **CNY 0.056792**, accounting complete, no unreconciled reservation |
 
-Experiment 2 used 6 trials instead of the 10 used by the archived run, and the planner picked logistic instead of `linear_svm C=0.1 combined`; that is why its test accuracy is about 0.9 points below the archived 0.668626.
+Trial history: dummy 0.511702 → **logistic 0.690426 (selected)** → `linear_svm` 0.671277 / 0.679787 / 0.684043 / 0.686170 / 0.673404 / 0.655319 / 0.687234 → `xgboost` 0.617021.
 
-## Reproduction — coupon-v3-20261123 (development, CPU)
+## Totals and record policy
 
-`coupon-v2` recorded a `status=failed` summary because the held-out `test.csv` was generated only after selection, so the automatic final prediction step read a missing file; the three planner calls themselves succeeded and `agent/evaluation.json` carried the real score. A clean single-pass rerun was made on 2026-11-23 to keep one internally consistent record:
+The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792), with no reservation held and both ledgers accounting-complete.
 
-| Item | Value |
-| --- | --- |
-| evaluation_id | `coupon-v3-20261123` |
-| compute | same frozen runtime, `device=auto`; the NVIDIA RTX 5060 Ti had detached (PnP status `CM_PROB_PHANTOM`, `torch.cuda.device_count()==0`), so the run executed on CPU |
-| data | identical splits, `test.csv` sha256 `ee6dac76…398c54` (same held-out file as `coupon-v2`) |
-| search | 4 trials, LLM planner chose catboost variants each time |
-| selected | trial 3, catboost `iterations=1200, depth=8, lr=0.035, l2=10` |
-| validation | 0.7512315270935961 |
-| held-out test | **accuracy 0.7828143476547103**, macro F1 0.775095 |
-| summary | `status=completed`, final prediction rows 2537 |
-| LLM calls | 3 recorded, 4250 input / 3752 output tokens |
-| cost | **CNY 0.019258**, accounting complete |
-
-The rerun is a reproducibility check, not a replacement: `coupon-v2` remains the reported GPU result (0.792274), and the CPU rerun lands 0.95 points lower with a different planner-selected family, which is consistent with losing the CUDA xgboost member.
-
-## Totals and archive policy
-
-The three 2026-11-23 runs cost **CNY 0.064658** in recorded Flash usage (0.018845 + 0.026555 + 0.019258), with no reservation held.
+These replace every interim 2026-11-23 record: the earlier `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so the disclosed 2026-11-23 total is CNY 0.135681 across five runs, while only the two runs above are reported as experiments.
 
 Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
