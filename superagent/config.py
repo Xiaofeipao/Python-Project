@@ -64,6 +64,7 @@ class TaskConfig:
     nested_cv_folds: int = 0
     nested_cv_max_rows: int = 600
     enable_feature_search: bool = False
+    final_fit_seeds: int = 1
 
     @classmethod
     def load(cls, path):
@@ -96,6 +97,8 @@ class TaskConfig:
             raise ValueError('enable_feature_search must be boolean')
         if type(self.stability_repeats) is not int or not 1 <= self.stability_repeats <= 3:
             raise ValueError('stability_repeats must be 1..3')
+        if type(self.final_fit_seeds) is not int or not 1 <= self.final_fit_seeds <= 5:
+            raise ValueError('final_fit_seeds must be 1..5')
         if type(self.search_patience) is not int or self.search_patience < 0:
             raise ValueError('search_patience must be a nonnegative integer')
         if type(self.allow_provisional_accounting) is not bool or (self.allow_provisional_accounting and self.evaluation_stage != 'development'):
