@@ -90,9 +90,22 @@ Two outcomes killed the idea:
 
 The change was therefore reverted in the working tree (`b8d38fb` keeps the implementation for reference), which restores the frozen runtime to `98bf60ef…`, the hash both reported experiments were frozen with. Running it would otherwise have forced a re-freeze and a rerun of both tasks for no accuracy gain.
 
+## Planner-model swap — Pro reproduces Flash exactly at eight times the cost
+
+The platform also serves `DeepSeek-V4-Pro`, which is already registered with official priced evidence (`configs/model_registry.pro.json`, CNY 4.5 input / 13.5 output per million, release 2026-08-13), so it can be accounted. Qwen was tested for and rejected on registration grounds, not on accuracy: the platform exposes `Qwen` (a rolling alias) and `Qwen3.8-27B`, whose release date 2026-11-21 is after the course cutoff 2026-10-21, and no published price exists for the 27B alias. Both fail `ModelCatalog` validation, so a Qwen run could not be booked without inventing a rate.
+
+| Run | planner | trials | validation | held-out test | LEDGER cost (CNY) |
+| --- | --- | --- | --- | --- | --- |
+| `coupon-pro-20261123` | Pro | 6 | 0.759606 | 0.790698 | 0.122270 |
+| `headlines-pro2-20261123` | Pro | 10 | 0.690426 | 0.660582 | 0.454991 |
+
+Both scores are identical to the Flash experiments to the last digit. The Pro planner did search differently — it front-loaded `linear_svm` variants on headlines (0.6713–0.6894) — but converged on exactly the Flash candidates, `cross_boost_blend` and `logistic` (char, separate, balanced). Planning cost rose from 0.014231 to 0.122270 on coupon and from 0.056792 to 0.454991 on headlines, about eight times, for zero accuracy.
+
+Two conclusions follow: the held-out ceilings are a property of the data and the candidate space, not of planner quality; and a more expensive planner buys nothing here. An earlier `headlines-pro-20261123` attempt failed before any call because the frozen bundle renames the registry to `registry.json`; it carries no charge and is kept only as a failed directory.
+
 ## Totals and record policy
 
-The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts, the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt) and the two seed-averaged runs (0.083167), the disclosed 2026-11-23 GPU usage is **CNY 0.869043** across eighteen runs, all accounting-complete with no reservation held.
+The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts, the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt), the two seed-averaged runs (0.083167) and the Pro-planner pair (0.577261), the disclosed 2026-11-23 GPU usage is **CNY 1.446304** across twenty runs, all accounting-complete with no reservation held.
 
 These replace every earlier interim record: `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so only the runs in this log are reported as experiments.
 
