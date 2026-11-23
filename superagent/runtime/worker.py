@@ -85,40 +85,22 @@ def main():
                     from superagent.evaluation.nested_cv import nested_diagnostic
                     result['nested_validation']=nested_diagnostic(train,request['profile'],candidate,config)
             else:
-                from dataclasses import replace
-
-                from superagent.models.ensemble import SeedAveragedModel
-
                 all_data = pd.concat([train, validation], ignore_index=True)
                 selected_resources = request["metadata"].get("selected_training_resources")
-                seeds = [config.seed + 101 * index for index in range(config.final_fit_seeds)]
-                members, recoveries = [], []
-                for seed in seeds:
-                    member = build_model(request["profile"], candidate, replace(config, seed=seed))
-                    member.memory = request.get("feature_cache")
-                    if hasattr(member.named_steps['classifier'], 'cache_dir') and request.get('feature_cache'):
-                        member.named_steps['classifier'].set_params(
-                            cache_dir=str(Path(request['feature_cache']) / 'members'))
-                    if selected_resources and "best_epoch" in selected_resources:
-                        # Refit on every allowed row for the train-only stopping
-                        # epoch(s), without consulting the designated test set.
-                        member.named_steps["classifier"].set_params(
-                            refit_epochs=selected_resources["best_epoch"])
-                    member, member_recoveries = fit_with_fallback(
-                        member, all_data, labels(all_data, config.target_column))
-                    # Prediction has no dependency on the training disk cache.
-                    member.memory = None
-                    if hasattr(member.named_steps['classifier'], 'cache_dir'):
-                        member.named_steps['classifier'].set_params(cache_dir=None)
-                    members.append(member)
-                    recoveries.extend(member_recoveries)
-                model = members[0] if len(members) == 1 else SeedAveragedModel(members, seeds)
+                if selected_resources and "best_epoch" in selected_resources:
+                    # Refit on every allowed row for the train-only stopping
+                    # epoch(s), without consulting the designated test set.
+                    model.named_steps["classifier"].set_params(refit_epochs=selected_resources["best_epoch"])
+                model, recoveries = fit_with_fallback(model, all_data, labels(all_data, config.target_column))
+                # Prediction has no dependency on the training disk cache.
+                model.memory = None
+                if hasattr(model.named_steps['classifier'], 'cache_dir'):
+                    model.named_steps['classifier'].set_params(cache_dir=None)
                 destination = Path(request["model_path"])
                 temporary = destination.with_name(destination.name + ".tmp")
                 joblib.dump({"model": model, "metadata": request["metadata"]}, temporary)
                 os.replace(temporary, destination)
-                result = {"status": "success", "model_path": str(destination),
-                          "final_fit_seeds": seeds}
+                result = {"status": "success", "model_path": str(destination)}
         estimator = model.named_steps["classifier"]
         result['hardware_recoveries'] = recoveries
         if hasattr(estimator, "training_report_"):
