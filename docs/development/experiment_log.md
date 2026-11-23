@@ -72,7 +72,40 @@ What the three runs establish:
 
 An earlier attempt in this batch (`headlines-minilm-20261123`) put the two flags in the policy file instead of the task config, so they never reached the profile; it was stopped after 8 trials and its directory removed. Its CNY 0.049710 charge stays in the ledger as an Aborted-flag misconfiguration record.
 
-Because the paired control shows no systematic gain, the reported experiments stay at `coupon-gpu-20261123` (0.790698) and `headlines-gpu-20261123` (0.660582). The three probe runs are disclosed as exploration, not as a new best; picking the 0.670483 seed would be selecting on the test set, which the protocol forbids.
+Because the paired control shows no systematic gain, the three probe runs were first disclosed as exploration only. The owner then asked to retain the highest-accuracy scheme, so the reported experiments were switched to `coupon-minilm2-20261123` (0.791486) and `headlines-minilm2-20261123` (0.670483) — see the comparison section below for the caveat that the headline lead is a single seed.
+
+## All schemes compared, and the retained combination
+
+Every evaluated run on the same split, sorted by held-out accuracy. `mini`/`fs` are `enable_minilm` / `enable_feature_search`, `rep` is `stability_repeats` (number of training seeds averaged for the validation score).
+
+| Run | planner | trials | mini | fs | rep | seed | test | macro F1 | cost (CNY) | runtime |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `coupon-minilm2-20261123` | Flash | 12 | ✓ | ✓ | 3 | 42 | **0.791486** | 0.785080 | 0.059672 | `98bf60ef…` |
+| `coupon-gpu-20261123` | Flash | 4 | – | – | 1 | 42 | 0.790698 | 0.784146 | 0.014231 | `98bf60ef…` |
+| `coupon-t10-20261123` | Flash | 10 | – | – | 1 | 42 | 0.790698 | 0.784146 | 0.058049 | `98bf60ef…` |
+| `coupon-t14r-20261123` | Flash | 14 | – | – | 1 | 42 | 0.790698 | 0.784146 | 0.065004 | `98bf60ef…` |
+| `coupon-pro-20261123` | Pro | 6 | – | – | 1 | 42 | 0.790698 | 0.784146 | 0.122270 | `98bf60ef…` |
+| `coupon-ens-20261123` | Flash | 6 | – | – | 1 | 42 | 0.787544 | 0.781200 | 0.025366 | `b85ff720…` |
+| `headlines-minilm2-20261123` | Flash | 12 | ✓ | ✓ | 3 | 42 | **0.670483** | 0.670466 | 0.076654 | `98bf60ef…` |
+| `headlines-gpu-20261123` | Flash | 10 | – | – | 1 | 42 | 0.660582 | 0.660564 | 0.056792 | `98bf60ef…` |
+| `headlines-minilm3-20261123` | Flash | 12 | ✓ | ✓ | 3 | 7 | 0.660582 | 0.660564 | 0.067790 | `98bf60ef…` |
+| `headlines-t15-20261123` | Flash | 15 | – | – | 1 | 42 | 0.660582 | 0.660564 | 0.074308 | `98bf60ef…` |
+| `headlines-t20r-20261123` | Flash | 20 | – | – | 1 | 42 | 0.660582 | 0.660564 | 0.089579 | `98bf60ef…` |
+| `headlines-pro2-20261123` | Pro | 10 | – | – | 1 | 42 | 0.660582 | 0.660564 | 0.454991 | `98bf60ef…` |
+| `headlines-ens-20261123` | Flash | 10 | – | – | 1 | 42 | 0.660582 | 0.660564 | 0.057801 | `b85ff720…` |
+
+Retained per task (highest test accuracy, ties by lowest cost):
+
+- **Coupon:** `coupon-minilm2-20261123`, 0.791486 (2008/2537), macro F1 0.785080, CNY 0.059672. Scheme: Flash planner, 12 trials, MiniLM + feature search on, three-seed validation, candidate `cross_boost_blend` (`gpu_seeds=3`, `gpu_weight=0.275`). It leads the next best by two rows.
+- **Headlines:** `headlines-minilm2-20261123`, 0.670483 (2167/3232), macro F1 0.670466, CNY 0.076654. Scheme: same flags and seeds, candidate `text_blend` (`linear_weight=0.5`, `C=0.1`).
+
+The combination that wins both tasks is therefore **Flash planner + 12 trials + MiniLM/feature-search enabled + three-seed validation**, which is what those two runs share. It costs CNY 0.136326 together versus 0.071023 for the previous pair.
+
+Caveats that the report must keep:
+
+- The headline lead is **one seed**. The paired seed-7 control with the identical scheme returns exactly 0.660582, so 0.670483 is not reproducible and sits at the top of a ±1 pt seed band. Reporting it as a systematic gain would overstate it.
+- The coupon lead is **two rows** over four other schemes that all land on 0.790698.
+- The cheapest scheme that reaches the same plateau is still `coupon-gpu-20261123` at CNY 0.014231 — a 4.2x cost premium buys 0.08 pt there.
 
 ## Seed-averaged final fit — implemented, measured, reverted
 
