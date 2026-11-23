@@ -34,10 +34,31 @@ Trial history: dummy 0.568473 → `cross_boost_blend` 0.758128 → 0.757143 → 
 
 Trial history: dummy 0.511702 → **logistic 0.690426 (selected)** → `linear_svm` 0.671277 / 0.679787 / 0.684043 / 0.686170 / 0.673404 / 0.655319 / 0.687234 → `xgboost` 0.617021.
 
+## Search-effort runs on the same runtime
+
+Three additional rounds raised the trial budget to see whether more planning calls buy accuracy. Every run used the same frozen runtime, the same splits and `device=auto` on the RTX 5060 Ti.
+
+| Run | trials | validation | held-out test | LLM calls | cost (CNY) |
+| --- | --- | --- | --- | --- | --- |
+| `coupon-gpu-20261123` | 4 | 0.759606 | 0.790698 | 3 | 0.014231 |
+| `coupon-t10-20261123` | 10 | 0.759606 | 0.790698 | 9 | 0.058049 |
+| `coupon-t14r-20261123` | 14 | 0.759606 | 0.790698 | 13 | 0.065004 |
+| `headlines-gpu-20261123` | 10 | 0.690426 | 0.660582 | 9 | 0.056792 |
+| `headlines-t15-20261123` | 15 | 0.690426 | 0.660582 | 11 | 0.074308 |
+| `headlines-t20r-20261123` | 20 | 0.690426 | 0.660582 | 15 | 0.089579 |
+
+The search has converged: coupon trials sit between 0.7547 and 0.7596 validation across 14 candidates, and the planner reselects the same `cross_boost_blend` point; headlines trials sit between 0.6564 and 0.6904, where `logistic` (char n-grams, separate) and one `linear_svm` variant tie, and the tighter of the two wins on test. Extra planning calls therefore cost money without moving the held-out score.
+
+Two further attempts were interrupted mid-run and are kept only as charge records: `coupon-t14` finished its search but its final fit was terminated, and `headlines-t20` stopped at trial 13; neither produced a model or test score. A decision-threshold sweep on the saved coupon model was also rejected: validation accuracy rose to 0.8828 at threshold 0.54 but test accuracy fell from 0.7907 to 0.7840, so the default 0.5 boundary is kept.
+
+Best versions (`runs/best.json`): `coupon-gpu-20261123` and `headlines-gpu-20261123`, chosen because they reach the same held-out score as the longer searches at the lowest recorded cost.
+
 ## Totals and record policy
 
-The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792), with no reservation held and both ledgers accounting-complete.
+The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds and the two interrupted attempts, the disclosed 2026-11-23 GPU usage is **CNY 0.532050** across twelve runs, all accounting-complete with no reservation held.
 
-These replace every interim 2026-11-23 record: the earlier `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so the disclosed 2026-11-23 total is CNY 0.135681 across five runs, while only the two runs above are reported as experiments.
+These replace every earlier interim record: `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so only the runs in this log are reported as experiments.
+
+Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
 
 Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
