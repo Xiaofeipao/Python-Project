@@ -1,6 +1,6 @@
 # Pro ten-trial development experiment
 
-Both tasks completed ten successful validation trials using the same frozen runtime and policy. `progressive_output=false`; test data was used only after final selection. Reloaded predictions, class probabilities and known token costs were checked. Full models and frozen source remain locally in `runs/_archive_20261123/pro_tasks_20261116/`.
+Both tasks completed ten successful validation trials using the same frozen runtime and policy. `progressive_output=false`; test data was used only after final selection. Reloaded predictions, class probabilities and known token costs were checked. The local run directory was removed after the reported experiments were re-run; the original request/response evidence and the recorded cost stay in the accounting ledger.
 
 - Coupon: test accuracy 79.0698% (2006/2537), validation best 75.9606%. Validation reached its best by trial five and did not improve through ten. Current-run known cost: CNY 0.2439945.
 - Headlines: test accuracy 66.8626% (2161/3232), validation best 69.1489%. Best validation was 69.0426% through eight trials and improved by trial ten. Current-run known cost: CNY 0.2704455.

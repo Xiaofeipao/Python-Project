@@ -36,4 +36,4 @@ Experiment 2 used 6 trials instead of the 10 used by the archived run, and the p
 
 Both experiments together cost **CNY 0.0454** in recorded Flash usage, with no reservation held.
 
-Earlier exploratory runs are archived under `runs/_archive_20261123/` and are not listed as experiments. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) and their evidence pointers were rewritten to the archive path, so every historical call still resolves. Those historical charges are disclosed AI usage, not part of either experiment above.
+Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.

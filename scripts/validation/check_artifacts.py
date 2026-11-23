@@ -22,12 +22,12 @@ from superagent.evaluation.inference import evaluate, load_solution, predict
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run", default="_archive_20261123/development_final",
-                        help="Directory under runs/ (optionally one subdirectory, e.g. _archive_20261123/development_final)")
+    parser.add_argument("--run", required=True,
+                        help="Run directory name under runs/ (one level only)")
     args = parser.parse_args()
     parts = [part for part in args.run.replace("\\", "/").split("/") if part]
-    if len(parts) not in {1, 2} or any(part in {".", ".."} for part in parts):
-        raise ValueError("--run must be a directory name, optionally prefixed by one archive subdirectory")
+    if len(parts) != 1 or parts[0] in {".", ".."}:
+        raise ValueError("--run must be a single directory name under runs/")
     directory = ROOT.joinpath("runs", *parts)
     benchmark = json.loads((directory / "benchmark.json").read_text(encoding="utf-8"))
     source_versions = set()
