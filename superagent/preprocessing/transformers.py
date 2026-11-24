@@ -28,7 +28,7 @@ def checked_vectorizer_options(options):
         elif key=='stop_words':
             valid=value in (None,'english')
         elif key=='ngram_range':
-            valid=isinstance(value,(list,tuple)) and len(value)==2 and all(type(v) is int for v in value) and 1<=value[0]<=value[1]<=5
+            valid=isinstance(value,(list,tuple)) and len(value)==2 and all(type(v) is int for v in value) and 1<=value[0]<=value[1]<=7
         else:
             valid=False
         if not valid:raise ValueError('Unapproved vectorizer option')
@@ -98,16 +98,26 @@ class JoinText(BaseEstimator, TransformerMixin):
 
 class MultiTextFeatures(BaseEstimator, TransformerMixin):
     """Shared training vocabulary, preserving column identity or signed differences."""
-    def __init__(self, columns, analyzer="word", representation="difference", max_features=30000, options=None):
+    def __init__(self, columns, analyzer="word", representation="difference", max_features=30000,
+                 options=None, pairwise_word_features=False):
         self.columns = columns
         self.analyzer = analyzer
         self.representation = representation
         self.max_features = max_features
         self.options = options
+        self.pairwise_word_features = pairwise_word_features
+
+    def __setstate__(self, state):
+        state.setdefault('options', None)
+        state.setdefault('pairwise_word_features', False)
+        super().__setstate__(state)
 
     def fit(self, X, y=None):
-        character = self.analyzer == 'char'
-        self.vectorizer_ = TfidfVectorizer(analyzer='char' if character else 'word',
+        if self.pairwise_word_features and (len(self.columns) != 2 or self.representation != 'difference'
+                                           or self.analyzer not in {'char','char_wb'}):
+            raise ValueError('Pairwise word features require two text columns, character features and signed differences')
+        character = self.analyzer in {'char','char_wb'}
+        self.vectorizer_ = TfidfVectorizer(analyzer=self.analyzer if character else 'word',
             ngram_range=(2, 5) if character else (1, 2), min_df=2,
             token_pattern=None if character else r'(?u)\b\w+\b',
             max_features=self.max_features, sublinear_tf=True, dtype=np.float32)
@@ -120,6 +130,14 @@ class MultiTextFeatures(BaseEstimator, TransformerMixin):
             vectors = [v for _,v in self.vectorizer_.transformer_list] if self.analyzer=='combined' else [self.vectorizer_]
             for vector in vectors:
                 vector.set_params(**checked_vectorizer_options(self.options))
+        if self.pairwise_word_features:
+            # One shared fitted union keeps character and word differences antisymmetric.
+            self.vectorizer_ = FeatureUnion([
+                ('character', self.vectorizer_),
+                ('word', TfidfVectorizer(analyzer='word', ngram_range=(1,2), min_df=2,
+                                       token_pattern=r'(?u)\b\w+\b', max_features=15000,
+                                       sublinear_tf=True, dtype=np.float32)),
+            ])
         self.vectorizer_.fit(pd.concat([X[c].fillna('').astype(str) for c in self.columns], ignore_index=True))
         return self
 
@@ -165,21 +183,26 @@ def preprocessor(profile, candidate, image_root):
     if candidate["family"] == "dummy":
         return ConstantFeatures()
     modality = profile["data_type"]
+    if candidate.get('pairwise_word_features') and (modality!='text'
+            or len(profile.get('text_columns') or [])!=2 or candidate.get('representation')!='difference'
+            or candidate.get('analyzer') not in {'char','char_wb'}):
+        raise ValueError('Pairwise word features require two text columns, character features and signed differences')
     if modality == "text":
         if candidate.get('representation'):
             features = MultiTextFeatures(profile['text_columns'], candidate.get('analyzer', 'word'),
                                      candidate['representation'],
                                      10000 if candidate['family'].startswith('torch_') else 30000,
-                                     candidate.get('vectorizer_options'))
+                                     candidate.get('vectorizer_options'),
+                                     candidate.get('pairwise_word_features',False))
             if candidate.get('svd_components'):
                 return Pipeline([('text', features), ('svd', BoundedSVD(candidate['svd_components'])),
                                  ('scale', StandardScaler())])
             return features
-        character = candidate.get("analyzer", "word") == "char"
+        character = candidate.get("analyzer", "word") in {'char','char_wb'}
         return Pipeline([
             ("join", JoinText(profile["text_columns"])),
             ("tfidf", TfidfVectorizer(
-                analyzer="char" if character else "word",
+                analyzer=candidate.get('analyzer','word') if character else 'word',
                 ngram_range=(2, 4) if character else (1, 2),
                 token_pattern=None if character else r"(?u)\b\w+\b",
                 max_features=12000 if candidate["family"].startswith("torch_") else 30000,

@@ -107,6 +107,11 @@ def next_candidate(profile, history, metric):
                  'svd_components': 128} for depth in (3, 6)]
     if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) > 1:
         initial.insert(0, {'family': 'text_blend', 'linear_weight': .5, 'C': .1})
+    if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) == 2:
+        pairwise = {'family':'logistic','C':1.,'analyzer':'char_wb',
+                    'representation':'difference','fit_intercept':False,
+                    'vectorizer_options':{'ngram_range':[3,6]}}
+        initial[0:0] = [pairwise, dict(pairwise,pairwise_word_features=True)]
     if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
         initial[0:0] = [{'family': 'cross_boost_blend'}] + [
             {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
@@ -226,7 +231,8 @@ def _build_model(profile, candidate, config):
         estimator = DummyClassifier(strategy="prior", **common)
     elif family == "logistic":
         estimator = LogisticRegression(C=candidate["C"], solver="lbfgs", max_iter=1200,
-                                       class_weight=candidate.get("class_weight"), **common)
+                                       class_weight=candidate.get("class_weight"),
+                                       fit_intercept=candidate.get('fit_intercept',True), **common)
     elif family == 'linear_svm':
         estimator = CalibratedClassifierCV(LinearSVC(C=candidate['C'], dual='auto', max_iter=10000,
                                                      **common), cv=3, n_jobs=config.threads)

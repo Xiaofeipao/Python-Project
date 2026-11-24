@@ -3,8 +3,8 @@ import math
 
 
 RULES = {
-    'logistic': {'C': (.001, 100.), 'analyzer': ['word', 'char', 'combined'], 'representation': ['difference', 'separate']},
-    'linear_svm': {'C': (.001, 100.), 'analyzer': ['word', 'char', 'combined'], 'representation': ['difference', 'separate']},
+    'logistic': {'C': (.001, 100.), 'analyzer': ['word', 'char', 'char_wb', 'combined'], 'representation': ['difference', 'separate'], 'fit_intercept':[True,False]},
+    'linear_svm': {'C': (.001, 100.), 'analyzer': ['word', 'char', 'char_wb', 'combined'], 'representation': ['difference', 'separate']},
     'text_blend': {'C': (.001, 100.), 'linear_weight': (.1, .9)},
     'catboost': {'iterations': (100, 1600), 'depth': (3, 9), 'learning_rate': (.01, .1), 'l2_leaf_reg': (1., 30.)},
     'xgboost': {'iterations': (100, 2000), 'depth': (3, 8), 'learning_rate': (.01, .1), 'reg_lambda': (1., 50.)},
@@ -12,21 +12,26 @@ RULES = {
 }
 for _family in ('logistic', 'linear_svm'):
     RULES[_family].update(feature_filter=['none','variance','mutual_info'], percentile=(10,100),
-                         imputer=['median','mean','most_frequent'], encoding=['onehot','ordinal'])
-    RULES[_family]['vectorizer_options']={'ngram_range':'two integers 1..5', 'min_df':'integer 1..10',
+                         imputer=['median','mean','most_frequent'], encoding=['onehot','ordinal'],
+                         pairwise_word_features=[False,True])
+    RULES[_family]['vectorizer_options']={'ngram_range':'two integers 1..7', 'min_df':'integer 1..10',
         'max_features':'integer 1000..100000','use_idf':'boolean','binary':'boolean','stop_words':[None,'english']}
 
 
 def apply_proposal(base, overrides, profile, trial_memory=None):
     if not isinstance(overrides, dict):
         raise ValueError('Proposal must be a parameter object')
-    feature_keys = {'analyzer', 'representation', 'feature_filter', 'percentile','imputer','encoding','vectorizer_options'}
+    feature_keys = {'analyzer', 'representation', 'feature_filter', 'percentile','imputer','encoding','vectorizer_options','pairwise_word_features'}
     changed = {k for k, v in overrides.items() if base.get(k) != v}
     if changed & feature_keys and changed - feature_keys:
         raise ValueError('Change features OR hyperparameters in one proposal, not both')
     rules = RULES.get(base['family'], {})
     result = dict(base)
     for key, value in overrides.items():
+        if key in {'fit_intercept','pairwise_word_features'} and type(value) is not bool:
+            raise ValueError('Boolean proposal setting requires a boolean value')
+        if key in {'fit_intercept','pairwise_word_features'} and profile.get('data_type')!='text':
+            raise ValueError('Text model settings require text input')
         if key in {'imputer','encoding'} and profile.get('data_type')!='tabular':
             raise ValueError('Tabular feature setting on non-tabular input')
         if key=='vectorizer_options' and profile.get('data_type')!='text':
@@ -48,6 +53,10 @@ def apply_proposal(base, overrides, profile, trial_memory=None):
         result[key] = value
     if result.get('representation') == 'difference' and len(profile.get('text_columns') or []) != 2:
         raise ValueError('Difference representation requires two columns')
+    if result.get('pairwise_word_features') and (profile.get('data_type')!='text'
+            or len(profile.get('text_columns') or [])!=2 or result.get('representation')!='difference'
+            or result.get('analyzer') not in {'char','char_wb'}):
+        raise ValueError('Pairwise word features require two text columns, character features and signed differences')
     if result.get('analyzer') == 'combined' and not result.get('representation'):
         raise ValueError('Combined features require ordered-text preprocessing')
     if result.get('gpu_weight', .25) + result.get('leaf_weight', 0.) > 1:

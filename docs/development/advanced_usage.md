@@ -1,5 +1,13 @@
 # Advanced Features and Development Evidence
 
+## Pairwise text candidate integration (not executed)
+
+The supplied WordModel share reports 70.00% validation accuracy on 940 examples, compared with a rechecked 69.68% baseline. This is a three-example validation gain, not a 70% independent test result. Its saved model was refitted on training plus validation and was not imported into this repository.
+
+For any input with exactly two text columns, search now offers word-boundary character TF-IDF (3-6 grams), signed left-minus-right features and logistic regression without an intercept. A second candidate adds shared word unigram/bigram differences, capped at 15,000 features. Existing FeatureUnion combines both branches, avoiding a separate duplicated feature pipeline. Existing candidates remain available and validation still determines selection. No task or column name dispatch was added; tabular candidates are unchanged.
+
+Proposals can select char_wb, fit_intercept and pairwise_word_features within existing change-category rules. Boolean flags and pairwise input shape are checked. Old serialized feature objects retain default behavior. Regression cases were added but not run, as requested. No training, inference, API calls or new accuracy measurements were performed for this integration, and existing best models remain unchanged.
+
 ## Search and feedback
 
 The same runner supports tabular, text and image classification. Candidates are selected from data properties and measured validation feedback, not task identity. Available methods include linear models, trees, boosting, neural models and bounded blends. Ordered text columns preserve their identities; signed differences are available for exactly two columns. Preprocessing and vocabulary statistics fit training data only.
