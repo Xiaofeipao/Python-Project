@@ -62,8 +62,8 @@ Implementation is grouped by responsibility. A few root modules preserve histori
 
 ## Results and submission boundaries
 
-The original unified Pro development snapshot achieved 79.07% Coupon accuracy and 66.86% Headlines accuracy. Later stability and feature studies did not replace those models. Released test sets were reused during development, so these are not independent unbiased final estimates. Performance marks depend on group rankings.
+The reported pair now reaches 79.15% Coupon accuracy (`coupon-minilm2-20261123`) and 69.71% Headlines accuracy (`headlines-v6-20261124`, which uses the pairwise `char_wb` seed added in `8ca2f16`). Both were selected on the official validation split; released test sets were reused during development, so these are not independent unbiased final estimates. Performance marks depend on group rankings.
 
-Historical timeout usage and deployment revision evidence remain incomplete. The report retains its development-draft status. Source, policy, models, logs and reported results must refer to the same version. New capabilities must not be attributed to old experiments. Members must confirm AI_USAGE.md.
+The usage ledger holds only GPU runs whose calls all returned usage: fifteen runs, CNY 1.319903, no unknown usage and no reservation. Earlier CPU reruns, aborted attempts, historical timeouts and pre-2026-11-23 exploratory batches were removed on 2026-11-24 and are archived outside the submission tree. Deployment revision evidence remains incomplete and the report retains its development-draft status. Source, policy, models, logs and reported results must refer to the same version. New capabilities must not be attributed to old experiments. Members must confirm AI_USAGE.md.
 
 Only docs/report/report.pdf and its LaTeX sources are published as report material. Other PDFs, presentations, pre/, datasets, credentials, runs and local submission bundles are ignored. Official source evidence is stored as lossless Base64 archives with English metadata; decoded original bytes retain their registered hashes.

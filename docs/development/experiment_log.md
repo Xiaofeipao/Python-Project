@@ -1,6 +1,6 @@
 # Experiment log
 
-Both reported experiments were run on 2026-11-23 on the RTX 5060 Ti (`gpu-pytorch`, torch 2.12.1+cu132) with the same frozen runtime (`runtime_sha256 = 98bf60ef…48a68c`), after the LLM planning path was fixed (180 s read timeout, hardened malformed-plan parsing, explicit reconciliation of unrecoverable usage). Both finished with `status=completed`, a full prediction file and an accounting-complete ledger.
+The reported pair now comes from two runtimes. `coupon-minilm2-20261123` was run on 2026-11-23 on the RTX 5060 Ti (`gpu-pytorch`, torch 2.12.1+cu132) with frozen runtime `runtime_sha256 = 98bf60ef…48a68c`; `headlines-v6-20261124` was run on 2026-11-24 from commit `8ca2f16` with frozen runtime `0dead41e…e534e`. Both finished with `status=completed`, a full prediction file and an accounting-complete ledger. The earlier planning-path fixes (180 s read timeout, hardened malformed-plan parsing) remain in force; the ledger is now GPU-only and carries no reconciled timeout.
 
 ## Experiment 1 — coupon-gpu-20261123 (development, GPU)
 
@@ -97,15 +97,16 @@ Every evaluated run on the same split, sorted by held-out accuracy. `mini`/`fs` 
 Retained per task (highest test accuracy, ties by lowest cost):
 
 - **Coupon:** `coupon-minilm2-20261123`, 0.791486 (2008/2537), macro F1 0.785080, CNY 0.059672. Scheme: Flash planner, 12 trials, MiniLM + feature search on, three-seed validation, candidate `cross_boost_blend` (`gpu_seeds=3`, `gpu_weight=0.275`). It leads the next best by two rows.
-- **Headlines:** `headlines-minilm2-20261123`, 0.670483 (2167/3232), macro F1 0.670466, CNY 0.076654. Scheme: same flags and seeds, candidate `text_blend` (`linear_weight=0.5`, `C=0.1`).
+- **Headlines:** `headlines-v6-20261124`, 0.697092 (2253/3232), macro F1 0.697089, CNY 0.027561, from the 2026-11-24 rerun on commit `8ca2f16` (see the next-but-one section). Scheme: same flags and seeds, candidate `logistic` on `char_wb` signed differences with `fit_intercept=false` and n-gram 3–6. The previous winner, `headlines-minilm2-20261123` (0.670483, CNY 0.076654, `text_blend`), is superseded.
 
-The combination that wins both tasks is therefore **Flash planner + 12 trials + MiniLM/feature-search enabled + three-seed validation**, which is what those two runs share. It costs CNY 0.136326 together versus 0.071023 for the previous pair.
+The combination that wins both tasks is therefore **Flash planner + 12 trials + MiniLM/feature-search enabled + three-seed validation**; headlines adds the pairwise `char_wb` seed introduced by `8ca2f16`. The reported pair costs CNY 0.087233 together versus 0.071023 for the cheapest pair.
 
 Caveats that the report must keep:
 
-- The headline lead is **one seed**. The paired seed-7 control with the identical scheme returns exactly 0.660582, so 0.670483 is not reproducible and sits at the top of a ±1 pt seed band. Reporting it as a systematic gain would overstate it.
-- The coupon lead is **two rows** over four other schemes that all land on 0.790698.
-- The cheapest scheme that reaches the same plateau is still `coupon-gpu-20261123` at CNY 0.014231 — a 4.2x cost premium buys 0.08 pt there.
+- The headline gain is now candidate-driven rather than seed-driven: the plain `char_wb` pairwise seed scores 0.700000 on validation and a tuned re-probe repeats at 0.690426, while `headlines-minilm2`'s 0.670483 was seed luck (its seed-7 control returns exactly 0.660582).
+- The coupon lead is **two rows** over four other schemes that all land on 0.790698; the current-code rerun lands 0.788727 because its blend used `gpu_weight=0.55`.
+- The cheapest scheme that reaches the coupon plateau is still `coupon-gpu-20261123` at CNY 0.014231 — a 4.2x cost premium buys 0.08 pt there.
+- The headlines rerun's planner was abandoned after two `Unapproved parameter` rejections (`minilm_logistic` has no tuning rules), so 6 of 12 trials were heuristic; the score stands, but planner coverage was thinner than the trial count.
 
 ## Seed-averaged final fit — implemented, measured, reverted
 
@@ -136,10 +137,34 @@ Both scores are identical to the Flash experiments to the last digit. The Pro pl
 
 Two conclusions follow: the held-out ceilings are a property of the data and the candidate space, not of planner quality; and a more expensive planner buys nothing here. An earlier `headlines-pro-20261123` attempt failed before any call because the frozen bundle renames the registry to `registry.json`; it carries no charge and is kept only as a failed directory.
 
+## Fresh rerun on the current code (2026-11-24)
+
+Commit `8ca2f16` ("Add generic pairwise word features for ordered text") added two initial pairwise seeds to the ordered-text search — `logistic` on `char_wb` signed differences with `fit_intercept=false`, one plain and one with `pairwise_word_features=true` — plus `char_wb` as an approved analyzer and n-gram ranges up to 7. Both tasks were therefore rerun from that HEAD with a fresh frozen bundle (`runtime_sha256 = 0dead41e…e534e`) and the winning policy (Flash, 12 trials, MiniLM + feature search, three seeds).
+
+| Run | trials | validation | held-out test | correct/rows | macro F1 | cost (CNY) | selected candidate |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `coupon-v6-20261124` | 12 | 0.758128 | 0.788727 | 2001/2537 | 0.782686 | 0.069836 | `cross_boost_blend` (`gpu_seeds=3`, `gpu_weight=0.55`) |
+| `headlines-v6-20261124` | 12 | 0.700000 | **0.697092** | 2253/3232 | 0.697089 | 0.027561 | `logistic` (`C=1.0`, `char_wb`, `difference`, `fit_intercept=false`, n-gram 3–6) |
+
+Coupon is unchanged in substance: the tabular branch was not touched by the commit, the search again plateaued at 0.757–0.758 validation, and the only difference from `coupon-minilm2` is the selected `gpu_weight` (0.55 against 0.275), worth −0.28 pt on test. Headlines moves decisively: the plain `char_wb` pairwise seed scores 0.700000 on validation, and the tuned re-probe repeats at 0.690426, so the +2.66 pt over `headlines-minilm2` is a property of the candidate and not of the seed.
+
+Two defects surfaced in this rerun:
+
+- `minilm_logistic` has no entry in `proposals.RULES`, so the planner's `{"C": 0.3}` / `{"C": 0.5}` proposals on that family are rejected as `Unapproved parameter`. Two consecutive rejections trip `llm_skipped` and the orchestrator drops to the deterministic menu; the headlines run used only 5 planner calls before that happened (trials 7–12 were heuristic). The search still found the win, but planner coverage is thinner than the trial count suggests.
+- `pairwise_word_features=true` scored 0.696809, slightly below the plain `char_wb` seed it extends (0.700000), so the generic word branch adds dimensions without adding signal here.
+
 ## Totals and record policy
 
-The two reported experiments together cost **CNY 0.071023** in recorded Flash usage (0.014231 + 0.056792); including the four search-effort rounds, the two interrupted attempts, the accuracy-enrichment probe (0.204116 plus the 0.049710 aborted-flag attempt), the two seed-averaged runs (0.083167) and the Pro-planner pair (0.577261), the disclosed 2026-11-23 GPU usage is **CNY 1.446304** across twenty runs, all accounting-complete with no reservation held.
+On 2026-11-24 the project owner asked for a GPU-only accounting record. The ledger was pruned to runs that still exist on disk, ran on the RTX 5060 Ti (`environment.json → torch.cuda_available=true`) and whose every call returned usage. It now holds **fifteen GPU runs and CNY 1.319903**, all accounting-complete, with no unknown usage and no reservation held:
 
-These replace every earlier interim record: `coupon-v2` (GPU, test 0.792274, `summary` marked failed because its held-out `test.csv` was written after selection), the `coupon-v3` CPU rerun (test 0.782814) and the 6-trial `headlines-v2` (test 0.659963). Their ledgers keep the charges actually incurred, so only the runs in this log are reported as experiments.
+| Group | Runs | CNY |
+| --- | --- | --- |
+| Reported pair | `coupon-minilm2` (0.059672) + `headlines-v6` (0.027561) | 0.087233 |
+| Cheapest pair | `coupon-gpu` (0.014231) + `headlines-gpu` (0.056792) | 0.071023 |
+| Search-effort rounds | `coupon-t10`, `coupon-t14r`, `headlines-t15`, `headlines-t20r` | 0.286940 |
+| MiniLM / seed probe | `coupon-minilm2`, `headlines-minilm2`, `headlines-minilm3` | 0.204116 |
+| Seed-averaged probe | `coupon-ens`, `headlines-ens` | 0.083167 |
+| Pro-planner pair | `coupon-pro`, `headlines-pro2` | 0.577261 |
+| Current-code rerun | `coupon-v6`, `headlines-v6` | 0.097397 |
 
-Earlier exploratory runs were removed from local `runs/` on 2026-11-23 and are not listed as experiments. Before removal, all 107 referenced request/response files were copied into `.model_usage/<ledger>/evidence/` and the ledger pointers were rewritten, so every historical call still resolves. Their charges stay in the accounting ledger (about CNY 13.3 in total, including two conservative timeout reconciliations at the reserved upper bound) as disclosed AI usage, not part of either experiment above.
+Removed in the same step: the CPU rerun `coupon-v3`, the aborted attempts (`coupon-t14`, `headlines-t20`, `headlines-minilm`, and the zero-call `headlines-pro`), the superseded interim runs (`coupon-v2`, `headlines-v2`), the API connectivity and cost probes, the two historical Flash timeouts together with their conservative reservations, and the earlier exploratory batches (`released-coupon` 6.690766, `released-headlines` 6.607808) — about CNY 13.5 in total. A zip of the removed ledgers is archived outside the submission tree, so the deletion is reversible and auditable; nothing retained has non-recorded usage.
