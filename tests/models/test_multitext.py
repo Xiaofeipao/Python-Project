@@ -64,6 +64,19 @@ class MultiTextTests(unittest.TestCase):
         model.transform(pd.DataFrame({'left': ['unseen words'], 'right': ['also unseen']}))
         self.assertEqual(fixed, model.vectorizer_.vocabulary_)
 
+    def test_xgboost_auto_without_cuda_or_torch(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        X = np.arange(80).reshape(40, 2)
+        for torch_module in (None, SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: False))):
+            with self.subTest(torch_installed=torch_module is not None):
+                with patch.dict('sys.modules', {'torch': torch_module}):
+                    model = EncodedXGBoost(iterations=5, depth=3).fit(X, ['accept', 'decline'] * 20)
+                self.assertEqual(model.device, 'auto')
+                self.assertEqual(model.resource_report_['device'], 'cpu')
+                self.assertEqual(model.model_.get_params()['device'], 'cpu')
+                np.testing.assert_allclose(model.predict_proba(X).sum(axis=1), 1)
+
     def test_xgboost_gpu_with_string_classes_and_cpu_inference(self):
         if importlib.util.find_spec('torch') is None:
             self.skipTest('torch is not installed (requirements-gpu.txt)')
@@ -72,6 +85,7 @@ class MultiTextTests(unittest.TestCase):
             self.skipTest('CUDA unavailable')
         X = np.arange(80).reshape(40, 2)
         model = EncodedXGBoost(iterations=5, depth=3).fit(X, ['accept', 'decline'] * 20)
+        self.assertEqual(model.resource_report_['device'], 'cuda')
         self.assertEqual(set(model.classes_), {'accept', 'decline'})
         self.assertEqual(model.model_.get_params()['device'], 'cpu')
         np.testing.assert_allclose(model.predict_proba(X).sum(axis=1), 1)

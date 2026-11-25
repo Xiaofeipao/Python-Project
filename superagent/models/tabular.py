@@ -113,7 +113,7 @@ class NativeLeafBoost(ClassifierMixin, BaseEstimator):
 
 class EncodedXGBoost(ClassifierMixin, BaseEstimator):
     def __init__(self, iterations=1600, depth=6, learning_rate=.03, reg_lambda=10,
-                 random_state=42, threads=1, device='cuda'):
+                 random_state=42, threads=1, device='auto'):
         self.iterations = iterations
         self.depth = depth
         self.learning_rate = learning_rate
@@ -124,13 +124,21 @@ class EncodedXGBoost(ClassifierMixin, BaseEstimator):
 
     def fit(self, X, y):
         from xgboost import XGBClassifier
+        device = self.device
+        if device == 'auto':
+            try:
+                import torch
+            except ImportError:
+                device = 'cpu'
+            else:
+                device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.classes_, encoded = np.unique(np.asarray(y, dtype=str), return_inverse=True)
         self.model_ = XGBClassifier(n_estimators=self.iterations, max_depth=self.depth,
             learning_rate=self.learning_rate, reg_lambda=self.reg_lambda,
             subsample=.85, colsample_bytree=.85, min_child_weight=3,
-            random_state=self.random_state, n_jobs=self.threads, tree_method='hist', device=self.device)
+            random_state=self.random_state, n_jobs=self.threads, tree_method='hist', device=device)
         self.model_.fit(X, encoded)
-        self.resource_report_ = {'device': self.device, 'backend': 'xgboost', 'training_rows': X.shape[0]}
+        self.resource_report_ = {'device': device, 'backend': 'xgboost', 'training_rows': X.shape[0]}
         # Use CPU inference so the saved pipeline does not require CUDA.
         self.model_.set_params(device='cpu')
         self.n_features_in_ = X.shape[1]
