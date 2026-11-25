@@ -14,7 +14,7 @@ python scripts/workflows/run_released_batch.py --output "runs/flash_$runStamp" -
 
 This performs new training and automatic selection for both tasks, using GPU where supported and available, with CPU fallback. It writes a new run directory and does not overwrite existing best models. Batch console output can remain quiet while subprocess logs are captured; the final task summary is printed after completion.
 
-The development-only provisional flag is necessary while historical task usage is unresolved. It does not reconcile old usage or make these results formally eligible. All new calls retain usage and cost records. Formal execution must follow full_assignment_workflow.md with reconciled accounting and frozen policy.
+This example explicitly uses development mode. Provisional accounting does not itself establish formal eligibility. Current ledger totals and completeness are documented in ../accounting/ledger_inventory.json. Formal execution must follow full_assignment_workflow.md, verify task-wide ledger identity and use the submitted frozen policy.
 
 ## Run a separate connectivity probe
 

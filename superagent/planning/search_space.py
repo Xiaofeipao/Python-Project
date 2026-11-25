@@ -112,6 +112,9 @@ def next_candidate(profile, history, metric):
                     'representation':'difference','fit_intercept':False,
                     'vectorizer_options':{'ngram_range':[3,6]}}
         initial[0:0] = [pairwise, dict(pairwise,pairwise_word_features=True)]
+        overlap = {'family':'pairwise_overlap','C':1.,'fit_intercept':True,
+                   'vectorizer_options':{'ngram_range':[3,6]}}
+        initial[2:2] = [overlap]
     if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
         initial[0:0] = [{'family': 'cross_boost_blend'}] + [
             {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
@@ -165,11 +168,16 @@ def next_candidate(profile, history, metric):
         elif family == 'text_blend':
             variants = [dict(candidate, linear_weight=w) for w in (.25, .75)]
             variants += [dict(candidate, C=c) for c in (.03, .3)]
+        elif family == 'pairwise_overlap':
+            variants = [dict(candidate, C=value) for value in (.3, 3.)]
+            variants += [dict(candidate, fit_intercept=not candidate.get('fit_intercept', True)),
+                         dict(candidate, class_weight='balanced')]
         elif family in {"linear_svm", "rbf_svm"}:
             variants = [dict(candidate, C=value) for value in (.01, 100.)]
         elif family == "logistic":
             variants = [dict(candidate, C=value) for value in (0.1, 10.0, 0.01, 100.0)]
             variants += [dict(candidate, class_weight="balanced")]
+            variants += [dict(candidate, fit_intercept=not candidate.get('fit_intercept', True))]
         elif family in {"extra_trees", "random_forest"}:
             variants = [dict(candidate, max_depth=depth, min_samples_leaf=leaf)
                         for depth, leaf in ((8, 2), (None, 1), (24, 3), (12, 5))]
@@ -226,6 +234,9 @@ def _build_model(profile, candidate, config):
                     'analyzer': 'combined', 'representation': 'separate'}, config)]
         return Pipeline([('preprocess', 'passthrough'),
                          ('classifier', ProbabilityBlend(members, weights=[weight, 1-weight]))])
+    if family == 'pairwise_overlap':
+        from superagent.models.pairwise import overlap_classifier
+        return overlap_classifier(profile['text_columns'], candidate, config.seed)
     common = {"random_state": config.seed}
     if family == "dummy":
         estimator = DummyClassifier(strategy="prior", **common)

@@ -1,5 +1,6 @@
 """Serializable train-only preprocessors, shared by training and prediction."""
 
+import re
 from pathlib import Path
 
 import numpy as np
@@ -94,6 +95,49 @@ class JoinText(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         return X[self.columns].fillna("").astype(str).agg(" ".join, axis=1).tolist()
+
+
+class PairwiseOverlapFeatures(BaseEstimator, TransformerMixin):
+    """Interpretable word-level overlap statistics for two ordered texts.
+
+    Unlike TF-IDF differences, these are dense, signed and standardized on the
+    training split only, so the same values are available at inference time.
+    """
+    NEGATIONS = frozenset({"not", "no", "never", "n't", "without", "hardly",
+                           "barely", "none", "nothing", "neither", "nor"})
+    TOKEN = re.compile(r"[a-z0-9']+")
+
+    def __init__(self, columns):
+        self.columns = columns
+
+    def _rows(self, X):
+        rows = []
+        for first, second in zip(X[self.columns[0]], X[self.columns[1]]):
+            a, b = str(first), str(second)
+            ta, tb = set(self.TOKEN.findall(a.lower())), set(self.TOKEN.findall(b.lower()))
+            nums_a, nums_b = {t for t in ta if t.isdigit()}, {t for t in tb if t.isdigit()}
+            names_a = {t for t in a.split() if t[:1].isupper()}
+            names_b = {t for t in b.split() if t[:1].isupper()}
+            neg_a, neg_b = bool(ta & self.NEGATIONS), bool(tb & self.NEGATIONS)
+            length_a, length_b = len(a.split()), len(b.split())
+            span = max(length_a, length_b, 1)
+            rows.append([
+                len(ta & tb) / (len(ta | tb) or 1),
+                len(nums_a & nums_b) / (len(nums_a | nums_b) or 1),
+                len(names_a & names_b) / (len(names_a | names_b) or 1),
+                float(neg_a != neg_b),
+                abs(length_a - length_b) / span,
+                (length_a - length_b) / span,
+                float(neg_a and neg_b),
+            ])
+        return np.asarray(rows, dtype=np.float32)
+
+    def fit(self, X, y=None):
+        self.scaler_ = StandardScaler().fit(self._rows(X))
+        return self
+
+    def transform(self, X):
+        return self.scaler_.transform(self._rows(X))
 
 
 class MultiTextFeatures(BaseEstimator, TransformerMixin):

@@ -65,10 +65,8 @@ python scripts/reporting/decision_timeline.py runs/task/events.jsonl --output Ti
 python -m unittest discover -s tests -v
 ```
 
-The original unified Pro snapshot achieved 79.07% / 66.86% on Coupon / Headlines. The later CPU stability run achieved 78.99% / 66.06%; Headlines stopped after nine trials. The four-trial linear feature study achieved 66.93% / 65.75%, without covering the original full search space. MiniLM trials also did not establish an improvement. Existing submitted models were retained.
+Current experiment details are maintained in experiment_log.md and current_results.json. Accounting totals and source hashes are maintained in ../accounting/ledger_inventory.json. These indexes replace duplicated result/cost narratives in operational guides.
 
-These released tests were reused during development. Hardware and search allocations differ, so changes are not causal ablations. API unavailability caused local planning; do not attribute those decisions to a model. Historical accounting/revision evidence remains incomplete.
+Current reported scores are development frontier observations across different frozen versions, with released-test reuse. They are not causal ablations or an independent final estimate. API success, accepted LLM plans, local fallback, model accuracy and accounting completeness remain separate facts.
 
-A controlled process-kill probe verified recovery and unchanged ledger paths. The latest pre-translation checks contained 53 cases: 51 passed and two CUDA checks were skipped. Original artifacts are local under runs/. Keep source, model, environment and logs from the same version. Only trusted serialized models should be loaded.
-
-New runtime functionality uses existing dependencies and Python's standard library. Windows PowerShell and taskkill were used only for the controlled fault-injection probe, not required for normal training. See the API guide for genuine calls, credentials and accounting.
+No training, inference, API calls or tests were performed during the documentation/accounting organization pass. Existing code tests and original artifacts remain the evidence for runtime behavior; no fresh pass count is claimed here. New runtime functions use existing dependencies and Python standard-library tools. See the API guide for genuine calls and accounting operations.

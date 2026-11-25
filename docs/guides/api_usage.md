@@ -55,7 +55,7 @@ python scripts/api/reconcile_usage.py --ledger-dir .model_usage/<task-hash> --ev
 
 `--apply` requires a basis and evidence; an evidence path must exist. The record books the call's worst-case reservation (CNY 5.24288 for Flash) as an explicit upper-bound charge, keeps input/output token counts absent, and stores the basis, evidence path, author and timestamp in `ledger.json`, `calls.jsonl` and `<ledger>/reconciliation.json`. `unreconciled_reserved_rmb` drops to zero while `conservative_reconciled_cost_rmb` and `charged_total_cost_rmb` report the bounded charge.
 
-`accounting_complete` deliberately stays false: the charge is bounded, the actual usage is not known. A reconciled task still refuses new model requests under the default policy and remains ineligible for formal submission; only provider-supplied usage can close the gap. On 2026-11-23 both historical Flash timeouts (released-coupon, released-headlines) were reconciled this way at the CNY 5.24288 bound.
+`accounting_complete` deliberately stays false: the charge is bounded, the actual usage is not known. A reconciled task still refuses new model requests under the default policy and remains ineligible for formal submission; only provider-supplied usage can close the gap. This is a description of the tool, not a statement that any current ledger contains such a record. The current record set and totals are indexed in ../accounting/ledger_inventory.json.
 
 Outputs include usage.jsonl, model_calls/, model_calls.jsonl, task_model_calls.json, model_usage.json and summary.json. Inspect current-run IDs when separating new calls from cumulative totals.
 
@@ -64,3 +64,5 @@ Official evidence archives under configs/evidence/ contain Base64-encoded origin
 ```powershell
 Remove-Item Env:HKUST_API_KEY
 ```
+
+For current record counts, hashes and totals, use ../accounting/ledger_inventory.json. Per-run usage snapshots are views of those calls, not additional charges. Do not relocate active ledgers or use the documentation inventory as a spending ledger.

@@ -21,6 +21,7 @@ superagent/
     transformers.py                 Imputation, encoding, text, SVD and images
     feature_selection.py            Variance/MI filters and memory limits
   models/
+    pairwise.py                     Selected ordered-text overlap classifier
     tabular.py                      Boosting, blending and member caching
     neural.py                       Neural training, devices and serialization
     text_encoder.py                 Fixed-revision MiniLM features
@@ -43,6 +44,7 @@ scripts/
  tests/                             Contracts, planning, models and workflows
  configs/                           Examples, policies, registries and evidence
  docs/guides/                       Operational instructions
+ docs/accounting/                   Current ledger inventory and accounting scope
  docs/development/                  Improvement review and experiment limits
  docs/report/                       Canonical report PDF and LaTeX
  examples/                          Small real execution examples

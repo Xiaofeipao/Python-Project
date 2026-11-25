@@ -1,0 +1,54 @@
+\newcommand{\PrimaryResults}{\begin{tabular}{lrrrr}\toprule Task&Val. (\%)&Test (\%)&Correct&Macro-F1\\\midrule
+Coupon&75.8785&79.1486&2008/2537&0.7851\\
+Headlines&70.3191&69.8020&2256/3232&0.6980\\
+\bottomrule\end{tabular}}
+\newcommand{\CallResults}{\begin{tabular}{lrrrrr}\toprule Task&Calls&Plans&Invalid&Input&Output\\\midrule
+Coupon&11&11&0&21356&9579\\
+Headlines&11&10&1&21787&12917\\
+\bottomrule\end{tabular}}
+\newcommand{\LedgerResults}{\begin{tabular}{lrr}\toprule Evaluation ID (date omitted)&Calls&Cost (CNY)\\\midrule
+\texttt{coupon-ens}&5&0.025366\\
+\texttt{coupon-gpu}&3&0.014231\\
+\texttt{coupon-minilm2}&11&0.059672\\
+\texttt{coupon-pro}&2&0.12227\\
+\texttt{coupon-t10}&9&0.058049\\
+\texttt{coupon-t14r}&13&0.065004\\
+\texttt{coupon-v6}&11&0.069836\\
+\texttt{headlines-ens}&9&0.057801\\
+\texttt{headlines-gpu}&9&0.056792\\
+\texttt{headlines-minilm2}&11&0.076654\\
+\texttt{headlines-minilm3}&11&0.06779\\
+\texttt{headlines-overlap}&11&0.073455\\
+\texttt{headlines-pro2}&8&0.45499\\
+\texttt{headlines-t15}&11&0.074308\\
+\texttt{headlines-t20r}&15&0.089579\\
+\texttt{headlines-v6}&5&0.027561\\
+\midrule Total&144&1.3933580\\\bottomrule\end{tabular}}
+\newcommand{\CouponTrials}{\begin{tabular}{rlrr}\toprule Trial&Family&Mean (\%)&SD (pt)\\\midrule
+1&Prior baseline&56.8473&0.0000\\
+2&Logistic&66.4532&0.0000\\
+3&Logistic&66.8144&0.1626\\
+4&Boost blend&75.7307&0.1523\\
+5&Boost blend&75.6650&0.0402\\
+6&Boost blend&75.6979&0.1984\\
+7&Boost blend&75.8292&0.1012\\
+8&Boost blend&75.6814&0.0837\\
+9&Boost blend&75.8785&0.1161\\
+10&Boost blend&75.8456&0.0614\\
+11&Boost blend&75.8456&0.1626\\
+12&Boost blend&75.8128&0.2090\\
+\bottomrule\end{tabular}}
+\newcommand{\HeadlinesTrials}{\begin{tabular}{rlrr}\toprule Trial&Family&Mean (\%)&SD (pt)\\\midrule
+1&Prior baseline&51.1702&0.0000\\
+2&MiniLM LR&66.8085&0.0000\\
+3&MiniLM LR&66.9149&0.0000\\
+4&MiniLM LR&66.8085&0.0000\\
+5&MiniLM LR&66.9149&0.0000\\
+6&MiniLM LR&67.1277&0.0000\\
+7&Logistic&65.5319&0.0000\\
+8&Overlap LR&70.3191&0.0000\\
+9&Pair blend&69.1489&0.0000\\
+10&Logistic + words&69.6809&0.0000\\
+11&xgboost&60.9929&0.7233\\
+12&Logistic&56.8085&0.0000\\
+\bottomrule\end{tabular}}

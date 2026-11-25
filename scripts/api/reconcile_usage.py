@@ -9,14 +9,13 @@ and records the basis plus the original evidence path, leaving
 Dry run is the default; it lists unrecorded calls and the current summary.
 """
 
-import sys as _sys
-from pathlib import Path as _Path
-_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
-
 import argparse
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from superagent.governance.usage_ledger import UsageLedger
 

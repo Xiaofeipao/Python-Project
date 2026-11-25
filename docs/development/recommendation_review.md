@@ -44,8 +44,8 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 23. **Family retirement/exhaustion: implemented.** Failed families leave the current menu and exhausted eligible search ends. Algorithms are not permanently banned across unrelated tasks.
 24. **Cost/time gates: implemented.** Historical unknown holds and the next worst-case request count against the task budget. Final refitting receives reserved time; restarting never resets the unseen window. Unreconciled runs remain development artifacts.
 
-## Evidence and limits
+## Current evidence and limits
 
-The exploratory runs that produced this review were removed from local `runs/` on 2026-11-23 when the reported experiments were re-run: a two-seed memory-stability study with real early stopping, a four-trial linear feature study with nested diagnostics (not a matched full-search comparison), and a resume fault probe whose `verification.json` recorded a real process interruption and successful automatic recovery.
+Use current_results.json for the retained model pointers, experiment_log.md for the current run catalog, and ../accounting/ledger_inventory.json for every current source ledger. Previously written implementation tests remain available in tests/; this organization pass did not run them again.
 
-The report still describes the 2026-11-16 frozen snapshot. Later local fallback was not presented as real LLM planning, and no accuracy improvement was established. Data and run artifacts remain local; repository code and tests support independent review.
+Capabilities described above are separate from measured improvement. Current reported models use different frozen runtime hashes, and the released test set was reused in development. The report still refers to its stated earlier frozen experiment. Current indexes do not authorize spending or replace original run artifacts.

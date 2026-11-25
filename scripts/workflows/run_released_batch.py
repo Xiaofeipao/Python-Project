@@ -1,8 +1,5 @@
 """Run configured released tasks serially; print scores only after both finish."""
 
-import sys as _sys
-from pathlib import Path as _Path
-_sys.path.insert(0,str(_Path(__file__).resolve().parents[2]))
 
 import json
 import argparse
@@ -10,9 +7,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from scripts.data.convert_numpy_task import convert_split
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(ROOT))
+from scripts.data.convert_numpy_task import convert_split
 
 
 def invoke(folder, entry, *args):

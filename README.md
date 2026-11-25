@@ -4,7 +4,8 @@ One system selects classification methods using training data, resources and val
 
 ## Start here
 
-- [Architecture and directory responsibilities](docs/architecture.md)
+- [Documentation index](docs/README.md) and [architecture](docs/architecture.md)
+- [Current accounting records](docs/accounting/README.md) and [model pointers](docs/development/current_results.json)
 - [Commands for running SuperAgent](docs/guides/quickstart.md)
 - [Review of every proposed improvement](docs/development/recommendation_review.md)
 - [Experiment log](docs/development/experiment_log.md)
@@ -62,8 +63,10 @@ Implementation is grouped by responsibility. A few root modules preserve histori
 
 ## Results and submission boundaries
 
-The reported pair now reaches 79.15% Coupon accuracy (`coupon-minilm2-20261123`) and 69.71% Headlines accuracy (`headlines-v6-20261124`, which uses the pairwise `char_wb` seed added in `8ca2f16`). Both were selected on the official validation split; released test sets were reused during development, so these are not independent unbiased final estimates. Performance marks depend on group rankings.
+The reported pair now reaches 79.15% Coupon accuracy (`coupon-minilm2-20261123`) and 69.80% Headlines accuracy (`headlines-overlap-20261125`, which adds seven standardized word-level overlap features to the pairwise `char_wb` difference seed). Within each run, model selection used the official validation split; these cross-run representatives were retained using observed test performance. Released test sets were reused during development, so these are not independent unbiased final estimates. Performance marks depend on group rankings.
 
-The usage ledger holds only GPU runs whose calls all returned usage: fifteen runs, CNY 1.319903, no unknown usage and no reservation. Earlier CPU reruns, aborted attempts, historical timeouts and pre-2026-11-23 exploratory batches were removed on 2026-11-24 and are archived outside the submission tree. Deployment revision evidence remains incomplete and the report retains its development-draft status. Source, policy, models, logs and reported results must refer to the same version. New capabilities must not be attributed to old experiments. Members must confirm AI_USAGE.md.
+The current accounting inventory covers every ledger presently under .model_usage/: 16 ledgers, 144 calls and CNY 1.393358 recorded token cost, with no missing-cost record or unresolved reservation in that source set. See docs/accounting/ledger_inventory.json for source hashes and scope. Selected-run costs are already included and must not be added again.
+
+The reported models have different frozen runtime hashes. They form a development frontier, not a single-version formal experiment. Deployment revision eligibility remains separate from accounting arithmetic. The published report describes an earlier frozen experiment and remains a draft; do not attribute later features or current frontier scores to it. Members must confirm AI_USAGE.md.
 
 Only docs/report/report.pdf and its LaTeX sources are published as report material. Other PDFs, presentations, pre/, datasets, credentials, runs and local submission bundles are ignored. Official source evidence is stored as lossless Base64 archives with English metadata; decoded original bytes retain their registered hashes.

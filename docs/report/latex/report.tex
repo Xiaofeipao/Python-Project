@@ -3,234 +3,151 @@
 \usepackage{amsmath,amssymb,graphicx,booktabs,array,url}
 \usepackage[hidelinks]{hyperref}
 \graphicspath{{figures/}}
+\input{generated.tex}
 \begin{document}
-\title{Feedback-Guided Classification Under Resource Constraints:\\A Reproducible General Algorithm SuperAgent}
-\author{Group Authors and Affiliations to Be Completed%
-\thanks{AIAA 3102 course project. Development draft, November 16, 2026. IEEE Transactions-style formatting does not imply journal submission or acceptance.}}
-\markboth{AIAA 3102 COURSE PROJECT --- DEVELOPMENT DRAFT}{General Algorithm SuperAgent}
+\title{A Feedback-Guided Classification SuperAgent: Current Architecture, Reproducible Experiments, and Token Accounting}
+\author{Project Team: Names, Student IDs and Section Pending Confirmation\thanks{AIAA 3102 course project. Updated November 24, 2026. Development report; IEEE-style layout is an editorial choice, not a claim of publication or completed formal eligibility.}}
+\markboth{AIAA 3102 Project Report --- November 24, 2026}{General Classification SuperAgent}
 \maketitle
 \begin{abstract}
-We present a constrained classification SuperAgent combining LLM planning, train-only preprocessing, automatic validation selection, isolated fitting, and persistent usage accounting. The same frozen runtime and policy complete ten trials each on coupon-response prediction and ordered headline comparison. Final test accuracies are 79.0698\% and 66.8626\%. Each task makes nine DeepSeek-V4-Pro requests with returned usage; four plans are accepted and five truncated responses trigger deterministic fallback. Known current-run costs are CNY 0.2439945 and CNY 0.2704455 under the specified official off-peak rates. Historical Flash timeouts remain unreconciled, so the results are explicitly provisional development artifacts. Validation-prefix analysis shows an early coupon plateau and a small late headline gain, not guaranteed improvement from additional search. We document all candidate experiments, reproducibility evidence, submission coverage, and remaining limitations without inventing missing author or compliance information.
+We describe a general classification SuperAgent with bounded language-model planning, validation feedback, isolated model fitting, reproducible source snapshots and persistent token accounting. The current runtime handles tabular, text and image inputs without dataset-name dispatch. Our primary experiments use the same runtime fingerprint as the current repository and complete twelve trials per released task. Coupon accuracy is 78.8727\% (2001/2537), and Headlines accuracy is 69.7092\% (2253/3232). Their recorded planning costs are CNY 0.069836 and CNY 0.027561. The complete current ledger inventory contains fifteen evaluations and 133 calls, totaling CNY 1.319903 with no missing-cost record or unresolved reservation in that source set. We separate these same-version results from a higher Coupon development result obtained with an older runtime. We document word-boundary character differences, optional word features, training-only nested diagnostics, recovery safeguards, failed proposals and local fallback. Released-test reuse, post-hoc cross-run comparison, unverified deployment revisions and missing authorship confirmation prevent treating this report as proof of an unbiased, fully finalized submission.
 \end{abstract}
-\begin{IEEEkeywords}Autonomous experimentation, classification, language models, reproducibility, resource accounting.\end{IEEEkeywords}
-\section{Introduction}
-\IEEEPARstart{A}{general} classification agent must inspect data, organize experiments, learn from feedback, select a solution, and produce a runnable model. With remote language models, reproducibility additionally requires verifiable identity and token accounting. A prediction file alone does not establish that these responsibilities have been met.
+\begin{IEEEkeywords}Autonomous experimentation, classification, validation, reproducibility, token accounting.\end{IEEEkeywords}
 
-The AIAA 3102 assignment requires one SuperAgent across released and unseen tasks. Dataset names must not invoke manually prepared algorithms. Reported runs must be autonomous: students may develop the system beforehand but cannot edit code, decide subsequent experiments, or select a final model during execution~\cite{assignment}.
+\section{Requirements and Reporting Scope}
+The supplied assignment requires a PDF describing system design, main experiments, results and limitations, alongside source, a unified entry point, dependencies, models/results, execution logs and an AI declaration~\cite{assignment}. The grading rubric assigns two points to report quality and two to execution/reproducibility within forty project points~\cite{rubric}. Neither supplied document prescribes a page limit, font, citation style or mandatory conference template. We retain the existing IEEE two-column layout for readability. These are the requirements available in this workspace; later course announcements must still be checked.
 
-Our constrained agent combines an LLM planner with general executable menus, isolated fitting, automatic selection, refitting, and task-level usage records. It does not synthesize arbitrary executable code. This trades open-ended invention for traceability and bounded execution. The main contributions are shared modality-aware pipelines, structured feedback, strict final-only test access, and explicit separation of known usage from unresolved reservations.
+The assignment requires reported solutions to use one final submitted version, forbids task-identity-based prepared solutions, restricts planner models to eligible Qwen/DeepSeek releases by October 21, 2026, and sets a CNY 20 model-usage budget per evaluation task. Test data is final-only. The unseen task uses the frozen submitted version within twenty-four hours of its official release, with no additional report required.
 
-This paper reports two complete ten-trial Pro development runs using the same frozen runtime and policy. Historical Flash requests still lack usage receipts. Thus, generated models are not accounting-complete formal submissions. Previous development also reused the designated test sets. Current run-level isolation does not restore project-wide independent evaluation.
+We therefore make the \emph{same-version November 24 pair} the primary experiment. Both source snapshots have fingerprint \texttt{0dead41e\ldots e534e}, which the report generator also verifies against the current repository runtime. Exact fingerprints, source input hashes and full candidate records are retained in \texttt{report\_data.json} and the original run directories. No training or API calls were performed to update this manuscript.
 
-\section{Requirements and Scope}
-The assignment permits tabular, text, and image classification with task-specific formats, splits, and metrics. Eligible Qwen/DeepSeek models must have official releases on or before October 21, 2026, and official standard API pricing. Usage is capped at CNY 20 per reported task, including all agents; actual input/output tokens and costs must be recorded without cache discounts, promotions, or free-credit reductions. Local deployment does not remove accounting obligations~\cite{assignment}.
+A separate development frontier retains Coupon 79.1486\% from \texttt{coupon-minilm2-20261123} and Headlines 69.7092\% from \texttt{headlines-v6-20261124}. Those models have different runtime hashes and were retained after cross-run inspection of observed test performance. They are \emph{not} represented as a single-version autonomous evaluation. This report does not change or replace either saved model.
 
-Grading covers released tasks (20\%), the unseen task (10\%), general design and autonomous development (30\%), execution/reproducibility/reporting (10\%), and presentation (30\%). This manuscript provides evidence for those categories without predicting grades. Image-related code and tests are not presented as a completed released image task.
+\section{System Architecture}
+\subsection{Layers and Execution}
+The unified entry point is \texttt{main.py}. Configuration validation lives in \texttt{superagent/config.py}. Runtime orchestration, isolated workers and checkpoint recovery occupy \texttt{runtime/}; candidate construction, LLM communication, proposal validation and trial memory occupy \texttt{planning/}. Data transformations and selectors live in \texttt{preprocessing/}; classifiers in \texttt{models/}; metrics, inference and nested diagnostics in \texttt{evaluation/}. The \texttt{governance/} layer owns accounting, frozen-bundle verification and configured test-file access. This separation keeps financial state outside model-selection code.
 
-The group must contain two to four students. Names, student identifiers, section, affiliations, and actual contributions remain to be supplied. No presentation or individual contribution is fabricated. The IEEE Transactions layout is a formatting choice, not a publication claim.
+Execution inspects training/validation data, establishes a class-prior baseline, builds a bounded candidate menu, runs a worker, evaluates validation performance and records feedback. Search ends at its trial, cost or time limit, on eligible-space exhaustion, or optional patience. The best permitted validation solution is refitted on training plus validation before final test inference. The reported runs enable MiniLM and feature-search capabilities and use three-seed validation; availability does not imply that a capability wins.
 
-The assignment does not explicitly prescribe a single off-peak convention. We apply the requested off-peak accounting policy and disclose that instructor acceptance remains to be confirmed. Official model release dates also do not independently attest the exact school deployment revision.
+\subsection{Bounded Autonomy}
+Planner context excludes task names, dataset paths, raw text, feature/label names and test scores. It includes modality statistics, recent five trials, the current best candidate, family summaries and the executable menu. Structured outputs contain a choice, diagnosis and next action; nonempty overrides require a hypothesis and success criterion. Overrides cannot change families, metrics, paths, code or resource policy. Feature settings and classifier hyperparameters cannot be changed together in one proposal. Multiple fields within a category remain possible, so this is not always a strict one-parameter causal experiment.
 
-\section{Architecture and Autonomous Workflow}
-The unified entry point is \texttt{agent/main.py}, with train, predict, evaluate, freeze, and verify-freeze commands. Configuration validation checks feature roles, supported metrics and modalities, evaluation stages, and resource bounds. The data inspector excludes labels/IDs from inputs, validates partitions, and records hashes and split metadata.
+Canonical candidate hashes prevent exact repeated configurations within a run. Family state records success/failure counts, best/mean utility, dispersion across configurations and elapsed time. Retirement and exploration are heuristics, not optimal scheduling or statistical tests. Family dispersion must not be confused with repeated-seed dispersion.
 
-Execution proceeds through configuration verification, environment capture, training/validation inspection, shared-ledger initialization, baseline fitting, iterative planning and validation, automatic selection, final refitting, and test prediction. Worker processes isolate fitting failures. The fitting cache excludes test data, and prediction has no feedback edge into search.
+\subsection{LLM Response Reliability and Fallback}
+The planner uses a 4096-token output allowance. It rejects empty/non-text messages, malformed JSON, non-object results, out-of-range choices, invalid parameters and repeats. A provider \texttt{finish\_reason=length} is rejected even if the visible content parses. Returned usage is logged before proposal validation: an invalid plan is still a charged request. No missing diagnosis is fabricated and no partial JSON is silently repaired.
 
-Data inspection, feature transformation, candidate construction, planning, fitting, orchestration, accounting, source freezing, and prediction are separate modules. Batch task names locate files and organize outputs; algorithm construction uses modality and generic statistics rather than dataset identity.
+Repeated invalid plans disable further API planning for that run; local validation-driven search continues with an explicit event. This bounds wasted calls but limits LLM influence. Two format examples and bounded context support concise replies; they do not establish a causal accuracy benefit. Table~\ref{tab:calls} reports actual primary-run decisions instead of equating HTTP success with autonomous planning.
 
-Fitted preprocessing and classification are serialized together with metadata. Pipeline and member cache dependencies are removed before saving. Inference therefore needs neither an original training cache nor an API key. Joblib artifacts should only be loaded from trusted sources.
+\section{Data and Methods}
+\begin{table}[t]\centering\caption{Supplied data partitions, preserved throughout search.}\label{tab:data}
+\begin{tabular}{lrrr}\toprule Task&Train&Validation&Test\\\midrule Coupon&8117&2030&2537\\ Headlines&8301&940&3232\\\bottomrule\end{tabular}\end{table}
+Both released tasks specify accuracy. Additional F1 scores are descriptive. Coupon contains twenty-one categorical input fields. Conversion from the supplied NumPy arrays preserves row order and original partitions. Text inputs retain their column identities. Optional IDs are excluded from predictor features.
 
-\subsection{Selection and Refitting}
-The first candidate establishes a class-prior baseline. Subsequent configurations come from a general planner and may be selected by an LLM using observed feedback. Successful candidates are ranked by metric utility:
-\begin{equation}t^\star=\operatorname*{arg\,max}_{t\in\mathcal S}u(s_t),\end{equation}
-where $s_t$ is validation performance and $\mathcal S$ contains successful trials. Accuracy is used for both tasks; it is not replaced by a more favorable metric.
+\subsection{Tabular Candidates}
+The search space includes linear models, traditional trees, CatBoost, LightGBM, supported neural candidates, GPU XGBoost and probability blends. The selected current-version Coupon model is a cross-boost blend with three members per boosting family, XGBoost group weight 0.55, CatBoost weight 0.45 and no leaf-model contribution. The individual randomized members and weights belong to the candidate, not manually selected test outcomes. Numeric and categorical preprocessing fit the training portion only. Family-member caching avoids redundant fitting where inputs and parameters match.
 
-After selection, the pipeline is refitted on training plus validation rows. If that fit fails, the next validation-ranked successful candidate may be attempted within the remaining deadline. Test scores never rank candidates. Final refitting uses 10,147 coupon rows and 9,241 headline rows.
+\subsection{Ordered Text Features}
+Generic two-column text candidates compare separate representations and signed differences. The new pairwise candidate uses a shared \texttt{char\_wb} TF--IDF vocabulary with character 3--6 grams, minimum document frequency two, sublinear term frequency and a bounded feature count. Given shared vocabulary map $\phi$ and simple surface statistics $s$, the feature vector is
+\begin{equation}
+x(A,B)=[\phi(A)-\phi(B),\ s(A)-s(B)].
+\end{equation}
+Logistic regression uses $C=1$, no intercept, the lbfgs solver and the existing iteration cap. Consequently the linear decision score changes sign when the input order is swapped; ties and label interpretation still require care. This is a generic input-shape candidate, not dispatch by a task or column name.
 
-A candidate cap operates alongside time/cost gates. Automatic devices allow CPU operation without CUDA. Recognizable out-of-memory failures can reduce batch size and then try CPU fitting; unrelated exceptions are not indiscriminately hidden. These are implemented recovery paths, not assertions that they all occurred here.
+An optional word unigram/bigram difference branch, capped at 15,000 features, joins the character features through the existing FeatureUnion. Shared fitting avoids duplicate pipelines and preserves signed differences. The primary Headlines run selects the \emph{plain character} candidate at trial eight, not the added-word variant. Its plain candidate reaches 70.0000\% validation; the word-augmented trial reaches 69.6809\%. The earlier share package's 70\% claim was validation accuracy, not an independent test result; its saved model was not imported.
 
-\section{Tasks and Evaluation Protocol}
-Coupon acceptance is a binary task with 21 categorical inputs. Generic NumPy-to-CSV conversion creates $C_0$--$C_{20}$ and row IDs while preserving original partitions and row order. Numeric-looking categories remain categorical; no numeric columns are identified. Training labels contain 4,614 positives and 3,503 negatives. Missingness in $C_{11}$--$C_{15}$ is approximately 0.86\%--1.56\%, handled inside the fitted pipeline.
+\subsection{Optional Features and Diagnostics}
+Imputation, one-hot/ordinal encoding, n-gram ranges, IDF, binary features, stopwords and selection settings are bounded proposal components. Variance and mutual-information filters fit training only; dense MI conversion has a 128 MiB limit. Text MI candidates may use training-fitted SVD first. Frozen MiniLM features use a pinned repository revision with remote code execution disabled. These candidates coexist with the original methods and do not guarantee improvement.
 
-The headline task receives ordered \texttt{headline\_A} and \texttt{headline\_B}. Label one means A has higher CTR than B; zero denotes the reverse. Keeping A/B identity matters. Training labels contain 4,175 ones and 4,126 zeros; neither text column is missing.
+Repeated training seeds produce mean and standard deviation on the \emph{same} official validation split. Final fitting uses the configured base seed, rather than choosing the best seed or automatically averaging refits. These standard deviations are descriptive, not confidence intervals or split uncertainty; ensemble seeds can overlap. Optional nested diagnostics perform inner selection between two regularization values and outer stratified evaluation on a bounded training subsample. They do not evaluate the complete AutoML search, and their smaller-sample scores do not replace official validation.
 
-\begin{table}[t]\centering\caption{Original supplied partitions.}\label{tab:data}
-\begin{tabular}{lrrr}\toprule Task&Training&Validation&Test\\\midrule Coupon&8117&2030&2537\\ Headlines&8301&940&3232\\\bottomrule\end{tabular}\end{table}
-Both tasks specify accuracy, $n^{-1}\sum_i\mathbf1[\hat y_i=y_i]$. Precision, recall and F1 are descriptive post-selection metrics. Test class statistics were read for reporting after execution, not passed to the planner. Every candidate uses the supplied validation partition.
+\section{Primary Same-Version Experiments}
+The primary runs are \texttt{coupon-v6-20261124} and \texttt{headlines-v6-20261124}. Both complete twelve trials under the same runtime, Flash planner, feature/MiniLM availability and three-seed validation scheme. The designated metric and supplied partitions remain fixed. Test conversion, inference and scoring follow within-run selection/refitting.
 
-The runs set \texttt{progressive\_output=false}: no intermediate test prediction is generated. The final model is selected and refitted before test conversion/inference/evaluation. Labels and test scores do not enter the menu or LLM context. This structural separation, timestamps, input hashes, and dedicated tests jointly support isolation; a boolean metadata flag alone is not proof. Earlier project-level test reuse remains a separate limitation.
+\begin{table*}[t]\centering\caption{Primary results from the same current frozen runtime. Validation values are selected seed means; test values evaluate the final refit.}\label{tab:results}\PrimaryResults\end{table*}
 
-\section{Features and Selected Models}
-Tabular pipelines validate schemas, handle missingness, and accommodate unseen categories. CatBoost receives native categories; XGBoost uses train-fitted one-hot encoding. Other available families include linear models, forests, ExtraTrees, LightGBM, and neural networks when supported. Availability does not imply execution in every ten-trial run.
+\begin{figure*}[t]\centering\includegraphics[width=.97\textwidth]{current_validation.png}\caption{Existing primary-run validation trajectories. Axes are zoomed; the prior baseline is omitted from the plotted range and retained in the appendix. Error bars show training-seed SD on the same validation split, not confidence intervals. Retained maxima cannot decrease by construction. These are not independent budget-ablation experiments.}\label{fig:validation}\end{figure*}
 
-The selected coupon solution uses three CatBoost and three XGBoost members. CatBoost parameters are 1,200 iterations, depth eight, learning rate 0.05, and L2 leaf regularization five. XGBoost uses 1,600 iterations, depth six, learning rate 0.03, and regularization ten. Seeds start at 42 and differ by 101. Predictions combine groups as
-\begin{equation}\hat p=\frac{0.75}{3}\sum_{j=1}^3p_j^{\mathrm{Cat}}+\frac{0.25}{3}\sum_{j=1}^3p_j^{\mathrm{XGB}}.\end{equation}
-The selected leaf-model weight is zero. Identical members are cached across weight comparisons; later cache-hit timings are not intrinsic training complexity.
+\subsection{Performance and Interpretation}
+Table~\ref{tab:results} gives 78.8727\% Coupon accuracy and 69.7092\% Headlines accuracy. Neither is asserted to be a leaderboard percentile; the performance rubric ranks groups independently per task. The unseen task has no measured result here. Dataset size and the small validation set constrain interpretation of marginal gains.
 
-Text pipelines fit TF--IDF on allowed fitting data. Word features use one/two-grams, character features two- through five-grams. Combined features concatenate both. Separate-column representations preserve A/B identity; signed differences encode ordered contrasts. Length, punctuation, digits and uppercase counts are supplemental features.
+The development-frontier Coupon result of 79.1486\% is two additional correct test rows over 79.0698\% in an earlier reference run. Such a small change does not establish a statistically reliable improvement. Its group weight and runtime differ from the current Coupon rerun. We retain the higher artifact for development comparison but do not substitute it into the same-version table.
 
-Candidates include logistic regression, calibrated linear SVMs, neural models, and XGBoost after train-fitted 128-dimensional truncated SVD, bounded for small matrices. The selected headline solution is a three-fold calibrated linear SVM, $C=0.1$, combined word/character features, and separate-column representation. Calibration uses fitting data only. Calibration folds and ensemble members are not additional agent trials.
-\section{LLM Planning and Reflection Evidence}
-The school endpoint returns \texttt{DeepSeek-V4-Pro}. Request context includes modality, training-row/feature counts, class counts, missingness, available candidates, earlier scores, elapsed times and failure categories. Task names, dataset names, file paths and test information are excluded.
+The current Headlines refit improves on an earlier 66.0582\% reference, but model features, planning trajectory and runtime changed together. No matched causal ablation separates the contribution of the LLM, word-boundary characters, regularization or search allocation. The unselected word branch cannot be credited with the selected model's test score. Validation/test gaps alone do not prove leakage.
 
-The response contract requires \texttt{choice}, \texttt{diagnosis}, \texttt{next\_action}, \texttt{abandoned\_strategy} and \texttt{reason}. Indices, repeated choices and required reflection fields are checked before execution. The model selects a reviewed action, not arbitrary generated code. Developer-designed menus and recovery policies remain substantive priors.
+\subsection{What the Planner Actually Did}
+\begin{table}[t]\centering\caption{Actual requests with usage and accepted plans in the primary runs. Invalid replies retain their costs.}\label{tab:calls}\small\CallResults\end{table}
+Coupon accepts ten of eleven calls and rejects one plan. Headlines accepts two of five calls and rejects three plans, including unsupported tuning proposals. After rejected plans and the cutoff, several experiments execute through local fallback. Those decisions are not described as LLM-generated. The logs separate suggested plans, executed candidates and observed validation outcomes; no reasoning is retrospectively invented.
 
-Each task issues nine Pro requests after its local baseline. All eighteen requests return actual usage without timeouts. Per task, four responses become accepted plans; five have \texttt{finish\_reason=length}, reach 2,048 completion tokens, lack valid complete JSON, and trigger deterministic fallback. HTTP-successful responses must not be counted as accepted decisions.
+Search-effort and seed studies in the current catalog illustrate diminishing returns, not a law that more trials improve test performance. MiniLM availability and final-fit averaging did not consistently beat n-gram or boosting candidates. The retained implementation therefore does not assume expensive methods are superior.
 
-The auditable chain links raw requests/responses, accepted-plan or invalid-plan events, trial execution, measured feedback and final selection. Feedback records best utility before/after the candidate, with gain
-\begin{equation}\Delta_t=\max_{k\leq t}u(s_k)-\max_{k<t}u(s_k).\end{equation}
-A family with repeated failures may leave the menu, but all twenty current candidates succeed. An observed failure-driven abandonment episode is therefore not invented.
+\section{Token Accounting and Resource Compliance}
+For call $i$, registered-rate cost is
+\begin{equation}
+K_i=\frac{r_{\mathrm{in}}n_{\mathrm{in},i}+r_{\mathrm{out}}n_{\mathrm{out},i}}{10^6}.
+\end{equation}
+The project uses fixed official off-peak accounting: Flash CNY 1/4 and Pro CNY 4.5/13.5 per million input/output tokens, with all inputs priced at cache miss. These are calculated token costs, not provider invoices. The accepted course interpretation of the pricing convention and the exact deployed revision must be confirmed. Original publisher evidence is stored in lossless Base64 archives; decoded bytes retain their registered SHA-256 values.
 
-Richer logs expose what happened instead of manufacturing missing reasoning. Increasing output allowance or reducing context redundancy may improve valid-plan yield, but a new complete experiment has not established that benefit. The system's constrained autonomy is more limited than unrestricted self-programming.
+The complete current inventory enumerates fifteen ledger files and 133 calls, totaling CNY 1.319903. All included calls have recorded costs; missing-cost records and unresolved reservations are zero in that record set. The primary Coupon and Headlines runs cost CNY 0.069836 and CNY 0.027561, respectively, totaling CNY 0.097397. The cross-version development-frontier pair costs CNY 0.087233. Both pairs are subsets of the inventory and must not be added to its total again. Table~\ref{tab:ledgers} lists every current ledger.
 
-\section{Experimental Setup and Histories}
-Both runs share one frozen runtime and policy: ten candidates, seed 42, four threads, automatic device selection, a 7,200-second task budget, a 600-second trial allocation and final-fit reserve fraction 0.3. API timeout is 180 seconds and output allowance 2,048 tokens. CUDA is available, without requiring a specific personal device model.
+Run IDs, task IDs, raw requests/responses and usage snapshots remain distinct. Per-run snapshots are views of recorded calls, not additional charges. The CNY 20 requirement applies to each announced task; a run-specific ID or a catalog subtotal alone does not certify correct formal task-wide mapping. Future unknown usage must remain unknown with its conservative reservation. No accounting record was rewritten for this report.
 
-Recorded software includes Python 3.11.15, NumPy 2.4.6, pandas 3.0.3, scikit-learn 1.9.0, SciPy 1.17.1, joblib 1.5.3, CatBoost 1.2.10, LightGBM 4.7.0 and XGBoost 3.2.0. These versions are audit facts, not universal requirements.
+The planner checks known costs, outstanding reservations and the next worst-case reservation before calling. Wall-clock search allocation preserves final-fit time, and isolated workers enforce trial deadlines. Device auto-selection supports CPU fallback; out-of-memory recovery reduces batch size or switches devices when supported. GPU availability does not mean every selected estimator runs on GPU. No personal hardware model is required to explain these results.
 
-The appendix lists all twenty candidates and parameters. All succeed. Worker seconds include fitting/validation but exclude some API waiting, startup and orchestration. End-to-end training workflows record 1,183.375 seconds for coupons and 887.906 seconds for headlines, approximately 19.72 and 14.80 minutes; these are not pure GPU times.
+\section{Reproducibility, Recovery and Isolation}
+The frozen source, input hashes, configuration, environment, trial memory and ledger pointers bind a run. Environment evidence records Python, main libraries and installed distributions. Historical pickle import wrappers preserve prediction compatibility while implementation modules remain organized by responsibility.
 
-The coupon model is selected at trial three and the headline model at trial nine. No human chooses the next candidate or final model inside these completed runs. Development edits before freezing and document preparation afterward are distinct activities. Fixed seeds improve reproducibility but do not guarantee identical remote-model responses.
+\begin{quote}\small\ttfamily
+python main.py train --config TASK.json --output runs/new\par
+python main.py predict --model MODEL.joblib --input TEST.csv --output predictions-new.csv
+\end{quote}
+These are command templates; inputs must be real, outputs new and serialized models trusted. API credentials remain outside the repository and outputs. Saved-model prediction does not need a planner key. The repository README and API guide provide exact options and dependencies. A GUI is not implemented.
 
-\section{Results and Search-Budget Returns}
-\begin{table}[t]\centering\caption{Final test results from one shared development runtime.}\label{tab:results}
-\begin{tabular}{lrrr}\toprule Task&Correct/total&Accuracy (\%)&Macro-F1\\\midrule Coupon&2006/2537&79.0698&0.7841\\ Headlines&2161/3232&66.8626&0.6686\\\bottomrule\end{tabular}\end{table}
-The coupon model predicts 2,006 of 2,537 examples correctly; the headline model predicts 2,161 of 3,232. Coupon class-zero/one recalls are 0.7142/0.8488; headline recalls are 0.6446/0.6935. These descriptive values suggest error-analysis directions but do not establish a semantic explanation for individual failures. A systematic error taxonomy has not been completed.
+The recovery entry verifies unchanged source, configuration, training/validation hashes, Python/distributions and original ledger, then restores to a new audit directory. Completed trials are not resubmitted; interrupted candidates remain identified. Parent directories preserve request/response provenance. Downtime and orphan-worker waiting count against the original budget. Locks prevent concurrent recovery, completed runs cannot resume, and the first restored decision is local to avoid replaying an interrupted API request. An isolated process-kill probe verified automatic completion and unchanged ledger paths; this is functional evidence, not proof against every possible system failure.
 
-We compare prefixes of the same ten-trial path instead of re-evaluating the test set for each budget. Coupon best validation accuracy is 75.8128\% after two trials and 75.9606\% after five, eight and ten. The true best occurs at trial three; seven later candidates do not improve it. The gain over the two-trial prefix equals three validation examples.
+A Python audit hook guards the configured test path before selection in the training interpreter. It is not a cross-process OS sandbox or a defense against arbitrary native code and file aliases. Batch-array conversion occurs after training. Preprocessing fits only the corresponding training fold, including each nested fold. Overlap diagnostics describe exact feature rows and normalized text; zero exact overlap cannot exclude semantic near-duplicates. Reliable timestamps/source groups are unavailable, so no chronology is invented.
 
-Headlines remain at 69.0426\% through prefixes two, five and eight, then reach 69.1489\% by ten because of trial nine. This equals one extra correct validation example. Figure~\ref{fig:curve} distinguishes candidate scores from retained maxima. No repeated-seed or statistical-significance study supports stronger claims.
+The current models match their own recorded source; the report generator verifies both primary snapshots against the repository runtime. Documentation-only organization does not make older models into newer-version experiments. No end-to-end training, prediction, model API request or regression test was rerun to regenerate the report.
 
-\begin{figure*}[t]\centering\includegraphics[width=.94\textwidth]{validation_curves.png}\caption{Candidate validation scores and retained maxima. This is one trajectory per task, not independent experiments for each prefix. The retained maximum cannot decrease by construction; generalization need not improve.}\label{fig:curve}\end{figure*}
-The earlier two-trial API workflow produced coupon/headline test accuracies of 79.2274\%/66.0582\%. The present headline score rises while coupon falls. This is not a controlled Flash-versus-Pro comparison: trajectories and conditions differ, and test data were reused. Historical best artifacts remain separate, not substituted into this paper's unified pair.
+\section{Limitations and Submission Readiness}
+\begin{enumerate}
+\item Released tests were reused during development and cross-run frontier retention used observed test performance. Within-run isolation does not undo that history; this is not a clean independent final evaluation.
+\item The same-version primary pair fixes a source-consistency issue, but does not retroactively remove post-hoc experimental choices. Freeze a final system before a genuinely unseen evaluation.
+\item Planning is bounded rather than arbitrary code synthesis. Few valid LLM decisions in the Headlines run limit claims of language-model autonomy. Better accuracy is not attributed causally to the LLM.
+\item Three-seed means reduce reliance on one seed but do not establish split robustness or significance. Nested subsampling estimates a smaller training procedure, not the full system.
+\item Current inventory completeness is a statement about the identified records. Formal task-wide budget identity, accepted pricing and deployed revision eligibility need explicit review.
+\item Author names, student IDs, section, actual member contributions and confirmed individual AI declarations are still missing. They are not fabricated. No unseen score is reported.
+\end{enumerate}
 
-No fifteen-trial comparison is complete under this policy. The evidence does not establish that fifteen trials beat ten, that more trials always improve test performance, or that Pro is intrinsically a better planner. Additional candidates can consume resources and overfit validation data without improving generalization.
-
-\section{Token Usage and Budget Accounting}
-The official historical image states Pro off-peak rates of CNY 4.5 per million input tokens (cache miss) and CNY 13.5 per million output tokens, effective August 17, 2026~\cite{prorelease,priceimage}. All input is priced at the cache-miss rate without platform discounts. Observed cost is
-\begin{equation}C=\frac{4.5n_{\mathrm{in}}+13.5n_{\mathrm{out}}}{10^6}.\end{equation}
-Output totals include reasoning when included in returned completion usage. Counts are not inferred from response-text length. Calculated values are accounting figures, not verified school invoices.
-
-\begin{table}[t]\centering\caption{Known costs and unresolved holds (CNY).}\label{tab:cost}
-\begin{tabular}{lrr}\toprule Quantity&Coupon&Headlines\\\midrule Current Pro run&0.2439945&0.2704455\\ Known task-wide total&0.3014195&0.2839105\\ Historical unknown hold&5.2428800&5.2428800\\ Actual complete total&Unknown&Unknown\\\bottomrule\end{tabular}\end{table}
-Earlier Flash read timeouts retain unknown usage. A later successful connection does not establish that those requests were unprocessed. Each task holds CNY 5.24288; actual cumulative totals remain null. Records are not deleted, converted to zero or moved into a newly named task to restore budget.
-
-An earlier DNS failure was separately reconciled using its original local getaddrinfo evidence of pre-connection failure. That reasoning does not apply to read timeouts. Provider usage receipts, or explicit confirmation that requests were not processed, are still needed.
-
-The development-only mode includes known observed costs, existing unknown holds and the next worst-case hold in the CNY 20 check. Pro bounds are conservatively 1,048,576 input and 393,216 output tokens, using the reviewed official output limit~\cite{pricing}. Thus, the next-request hold is
-\begin{equation}R=\frac{4.5(1048576)+13.5(393216)}{10^6}=10.027008.\end{equation}
-This is not average or actual usage. Ambiguous requests are not retried and their holds remain; local planning may continue. Formal released/unseen execution rejects provisional accounting and requires reconciled actual usage.
-
-Known costs plus historical holds are approximately CNY 5.5443/5.5268, below the bound but not actual complete totals. The summary therefore retains \texttt{accounting\_provisional=true} and \texttt{eligible\_for\_formal\_submission=false}. Generating predictions does not waive these formal prerequisites.
-
-\section{Reliability, Isolation and Reproducibility}
-Worker processes enforce native thread settings and candidate deadlines. Recognizable allocation errors can reduce batch size and then attempt CPU fitting, but unrelated failures are preserved. No actual OOM episode is claimed in these runs. Cached ensemble members explain some large trial-time differences.
-
-Forty-two implementation checks pass. A dedicated strict-default check verifies that first prediction-time test access follows final selection and that no partial-test event occurs. This complements source structure, hashes and logs; none alone proves project-wide evaluation independence.
-
-Copied models reproduce saved predictions row by row; probabilities also match. Training-cache paths are disconnected before serialization. Package hashes support copy-integrity checking. Report edits do not alter the immutable source snapshot, rerun models or rewrite original history.
-
-Both models share this runtime SHA-256, shown as contiguous halves:
-\begin{quote}\footnotesize\ttfamily d129aaae4c89df8f925759e30fd48a291\\60bfb774b592aadee6ae4d335d4d13e\end{quote}
-Dependencies, hardware numerics, remote service behavior and aliases can change. Seeds do not guarantee bitwise equivalence or identical future LLM text. A generic school Pro response name does not attest its exact revision. Official release evidence and deployment identity are distinct.
-\section{Installation and Fixed-Model Replay}
-Install root \texttt{requirements.txt} in an appropriate Python environment. GPU training dependencies are described separately. Existing models support CPU inference without API keys. Only trusted joblib artifacts should be deserialized.
-
-Verify the immutable snapshot with:
-\begin{quote}\small\ttfamily python agent/main.py verify-freeze\\--manifest agent/frozen\_manifest.json\end{quote}
-Coupon inference is:
-\begin{quote}\small\ttfamily python agent/main.py predict\\--model tasks/coupon/model.joblib\\--input data/coupon/test.csv\\--output coupon\_predictions\_new.csv\end{quote}
-For headlines, replace both task directories with \texttt{headlines} and choose a new output filename. Targets must not exist. Final evaluation uses the separate \texttt{evaluate} command on a fixed model and labeled input; the result must not become subsequent search feedback.
-
-Fresh training requires correct local inputs, the intended algorithm policy, evaluation stage, local credentials and a ledger shared by all agents for that task. Historical paths in original records are audit evidence, not commands to rewrite into a fictitious new execution. The provisional option must not silently replace formal execution.
-
-Fixed-model replay is available immediately. Formal retraining still requires historical receipts, deployment confirmation and an accepted price interpretation. Changing a configuration label does not convert development artifacts into compliant formal results.
-
-\section{Unseen-Task Plan}
-The course releases the unseen task after both sections finish presentations. The submitted SuperAgent must operate within 24 hours of release using its final frozen version, without human intervention. Predictions and execution logs are required, but no additional report~\cite{assignment}. No unseen score, duration or completion claim is currently available.
-
-The intended process validates official formats, labels, metrics and release time, then applies the same frozen analysis, planning, validation, selection, refitting and prediction pipeline. Input configuration must not act as dataset-specific algorithm dispatch. Formal execution retains strict test isolation, verified eligibility and reconciled accounting.
-
-Closing intermediate test access creates a real trade-off: a premature search termination may leave no test prediction. Partial work must be described honestly rather than filled with invented results. Support in source/tests does not establish empirical success on arbitrary large image datasets, multiclass problems or all malformed inputs. Those studies remain future work.
-
-\section{Limitations and Future Work}
-The system is constrained AutoML--agent integration, not unrestricted self-programming. Menus, priorities and recovery rules encode human choices. Eight of eighteen responses become accepted plans. Attributing all gains to LLM reasoning would overstate autonomy.
-
-The principal observed planning defect is truncation at 2,048 tokens. Larger output allowance, shorter context or supported reasoning controls should be assessed by valid-JSON yield, cost and validation benefit. More elaborate logs alone do not improve decisions. These suggestions are not completed experiments.
-
-Validation gains are small: three coupon examples and one headline example beyond the two-trial prefix. Repeated seeds, controlled planner ablations, confidence intervals and systematic error analysis are absent. Search may overfit fixed validation data, and prior test reuse adds selection bias.
-
-The accounting and deployment gaps are substantive. The group must recover receipts for old timeouts, verify Pro's deployed revision and confirm acceptance of off-peak pricing. Low known costs do not replace complete actual accounting. Formal compliance is not claimed before those issues are resolved.
-
-Further experiments should address those prerequisites and output failures before claiming broader generality or increasing search indefinitely. The observed plateau does not justify a universal recommendation for higher trial caps.
-
-\section{Contributions and AI-Tool Disclosure}
-\textit{To be completed by the group: member names, student IDs, section, affiliations, actual contributions and individual review statements.} Possible responsibility categories are data processing, orchestration, modeling, accounting/reproduction and reporting/presentation. They are suggestions, not invented claims about identified members.
-
-OpenAI Codex assisted requirement interpretation, coding, review, debugging, testing and document preparation. Runtime school-model calls are recorded separately. The project ledger cannot establish developer-tool usage. Members should disclose additional tools and their own verification scope. This draft is not a signed statement on behalf of unidentified authors.
-
-All members remain responsible for explaining the implementation, costs, results and limitations. Development assistance is distinct from autonomous execution. No final presentation or personal contribution is fabricated.
-
-\section{Submission Coverage and Outstanding Actions}
-The package contains runtime source and unified entry, dependencies/README, per-task models and results, experimental/resource logs, this report and editable LaTeX source, and an AI-tool statement. The appendix maps requirements to files.
-
-Before final submission, complete authorship details, recover receipts, confirm deployment eligibility and pricing, and determine whether reconciled formal reruns are necessary. Report results must agree with the submitted code, models and logs. Completing report prose does not resolve experimental defects.
-
-The deadline is 23:59 on the evening before the first class of the relevant section's final week; the section-specific date still requires confirmation. The submitted version is frozen for unseen evaluation. This manuscript covers the required topics without pretending unresolved facts are complete.
+The deliverable covers system design, main experiments, results and limitations as requested. Source, dependency/setup instructions, model/preprocessing artifacts and logs remain separate submission requirements. The final presentation is assessed independently. A paper-like layout does not establish compliance or guarantee a high grade.
 
 \section{Conclusion}
-The shared agent completes ten trials and final inference for both released tasks using Pro-assisted decisions and auditable fallback. Copied artifacts reproduce stored predictions. Validation-prefix analysis shows an early coupon plateau and a small late headline gain, not guaranteed test improvement from additional trials.
-
-Its strongest evidence is traceability across candidates, accepted plans, fallback, observed usage and unknown reservations. Restricted autonomy, output truncation, small unreplicated gains, reused tests and unresolved accounting/deployment evidence limit the conclusions. These are development results until the outstanding formal prerequisites are met.
+The current SuperAgent provides a coherent, auditable loop from data inspection to validation-based proposals, fitting, selection and final inference. Same-runtime development results are 78.8727\% and 69.7092\%, with CNY 0.097397 recorded planning cost for that pair. The complete present ledger set totals CNY 1.319903. Improvements in engineering and text representations are supported by artifacts, while causal accuracy gains, clean final generalization and complete submission eligibility remain bounded claims. The next formal milestone is a verified frozen submission and unattended unseen evaluation, not another retrospective claim from released tests.
 
 \appendices
-\section{Complete Candidate Histories}
-The following tables retain every executed candidate, including those that do not improve validation. All twenty trials succeed. Times are worker fitting/validation measurements, not full workflow costs. Selected models remain the automatically chosen trial-three coupon blend and trial-nine headline SVM.
-\begin{table*}[t]\centering\scriptsize
-\caption{Complete coupon history. All candidates succeeded.}\label{tab:coupon}
-\begin{tabular}{rp{0.66\textwidth}rr}\toprule Trial&Candidate and parameters&Validation (\%)&Seconds\\\midrule
-1&family=dummy&56.8473&2.62\\
-2&family=cross\_boost\_blend&75.8128&359.75\\
-3&family=cross\_boost\_blend, gpu\_seeds=3, gpu\_weight=0.25, leaf\_weight=0.0&75.9606&15.47\\
-4&family=cross\_boost\_blend, gpu\_seeds=3, gpu\_weight=0.5, leaf\_weight=0.0&75.7143&4.62\\
-5&family=cross\_boost\_blend, gpu\_seeds=3, gpu\_weight=0.25, leaf\_weight=0.15&75.4680&5.53\\
-6&family=cross\_boost\_blend, gpu\_weight=0.1&75.9113&3.67\\
-7&family=catboost, iterations=600, depth=6, learning\_rate=0.05, l2\_leaf\_reg=3&74.8276&27.20\\
-8&family=cross\_boost\_blend, gpu\_weight=0.5&75.7143&4.09\\
-9&family=cross\_boost\_blend, gpu\_weight=0.75&75.6650&4.36\\
-10&family=xgboost, iterations=2000, depth=4, learning\_rate=0.03, reg\_lambda=10&74.4335&6.58\\
-\bottomrule\end{tabular}
-\end{table*}
-\begin{table*}[t]\centering\scriptsize
-\caption{Complete headlines history. All candidates succeeded.}\label{tab:headlines}
-\begin{tabular}{rp{0.66\textwidth}rr}\toprule Trial&Candidate and parameters&Validation (\%)&Seconds\\\midrule
-1&family=dummy&51.1702&2.03\\
-2&family=logistic, C=1.0, analyzer=char, representation=separate, class\_weight=balanced&69.0426&14.14\\
-3&family=xgboost, iterations=1000, depth=3, learning\_rate=0.03, reg\_lambda=10, analyzer=combined, representation=separate, svd\_components=128&61.7021&15.05\\
-4&family=linear\_svm, C=1.0, analyzer=char, representation=difference&67.1277&42.24\\
-5&family=xgboost, iterations=1000, depth=6, learning\_rate=0.03, reg\_lambda=10, analyzer=combined, representation=separate, svd\_components=128&60.8511&7.36\\
-6&family=linear\_svm, C=0.1, analyzer=char, representation=difference&68.4043&10.05\\
-7&family=linear\_svm, C=0.1, analyzer=char, representation=separate&68.6170&34.22\\
-8&family=linear\_svm, C=1.0, analyzer=char, representation=separate&67.7660&96.58\\
-9&family=linear\_svm, C=0.1, analyzer=combined, representation=separate&69.1489&40.62\\
-10&family=linear\_svm, C=10.0, analyzer=char, representation=difference&65.6383&57.22\\
-\bottomrule\end{tabular}
-\end{table*}\section{Artifact and Audit Index}
-\begin{table*}[t]\centering\small\caption{Submission requirement coverage. File presence does not resolve compliance gaps.}\label{tab:files}
-\begin{tabular}{p{.24\textwidth}p{.68\textwidth}}\toprule Requirement&Evidence\\\midrule
-Complete code / entry&\texttt{agent/main.py}, \texttt{agent/superagent/}, immutable frozen manifest.\\
-Dependencies / setup&Root \texttt{requirements.txt}, \texttt{requirements-gpu.txt}, \texttt{README.md}.\\
-Runnable task solutions&Per-task \texttt{model.joblib}, \texttt{predictions.csv}, \texttt{test\_evaluation.json}.\\
-Decisions and experiments&\texttt{trials.jsonl}, \texttt{events.jsonl}, original \texttt{model\_calls/}.\\
-Resources and model evidence&\texttt{usage.jsonl}, \texttt{model\_usage.json}, \texttt{task\_model\_calls.json}, \texttt{environment.json}, official evidence snapshots.\\
-Report and disclosure&\texttt{report.pdf}, \texttt{latex\_source/report.tex}, \texttt{AI\_USAGE.md}, \texttt{TODO\_BEFORE\_SUBMIT.md}.\\
-Replay integrity&Root \texttt{verification.json}, \texttt{PACKAGE\_HASHES.json}, fixed \texttt{data/} partitions.\\\bottomrule\end{tabular}\end{table*}
-Usage snapshots include previous attempts. Identify current-run calls by the summary's run ID. Unknown usage is not a zero-cost success; a hold is not a charge; validation is not test performance; an HTTP success is not necessarily an accepted plan. These distinctions are necessary to reproduce totals and avoid overstating autonomy.
+\section{Complete Primary Trial Summaries}
+Means and SD are percentages/percentage points on the official validation partition. Full parameters, seed scores, elapsed times and source fingerprints are retained in report\_data.json and original trials.jsonl. Rows are measured experiments, not generated narrative.
+\begin{table}[h]\centering\caption{Coupon: twelve current-version trials.}\small\CouponTrials\end{table}
+\begin{table}[h]\centering\caption{Headlines: twelve current-version trials.}\small\HeadlinesTrials\end{table}
+
+\section{Current Accounting Inventory}
+\begin{table}[h]\centering\caption{Every current ledger, with date suffixes omitted for width. Dates and source hashes are in the inventory JSON.}\label{tab:ledgers}\small\LedgerResults\end{table}
+
+\section{Evidence Index and AI Use}
+\begin{itemize}
+\item Primary runs: \path{runs/coupon-v6-20261124/} and \path{runs/headlines-v6-20261124/}.
+\item Ledger identities and hashes: \path{docs/accounting/ledger_inventory.json}.
+\item Development frontier and catalog: \path{docs/development/current_results.json} and \path{docs/development/experiment_log.md}.
+\item Rebuildable tables and source data: \path{generated.tex} and \path{report_data.json}.
+\item Reporting-only generator: \path{scripts/reporting/update_report_data.py}; it performs no training or API calls.
+\end{itemize}
+
+OpenAI Codex assisted implementation, review, testing and documentation. Runtime Flash/Pro usage is separately logged and does not measure development-tool usage. Each member must confirm actual tools, contributions and understanding in AI\_USAGE.md. The source declares known limits instead of treating missing evidence as success.
 
 \begin{thebibliography}{9}
-\bibitem{assignment} AIAA 3102, ``Final Project: General Algorithm SuperAgent---Full Assignment Requirements,'' course-provided specification, included in the submission.
-\bibitem{prorelease} DeepSeek, ``DeepSeek-V4-Pro official release,'' Aug. 13, 2026. [Online]. Available: \url{https://api-docs.deepseek.com/zh-cn/news/news260813/}
-\bibitem{priceimage} DeepSeek, ``DeepSeek-V4 API pricing,'' historical official image, effective Aug. 17, 2026. [Online]. Available: \url{https://api-docs.deepseek.com/zh-cn/img/v4_260813_price_cn.png}. A hash-checked copy is included.
-\bibitem{pricing} DeepSeek, ``Models and pricing,'' official documentation, snapshot retrieved Nov. 16, 2026. [Online]. Available: \url{https://api-docs.deepseek.com/zh-cn/quick_start/pricing/}. This does not attest the school deployment revision.
+\bibitem{assignment} AIAA 3102 teaching team, ``Final Project: General Algorithm SuperAgent---Full Assignment Requirements,'' course-provided specification, local repository.
+\bibitem{rubric} AIAA 3102 teaching team, ``Final Project Grading Rubric (40 Points),'' course-provided rubric, local repository.
+\bibitem{evidence} Project model registries, fixed official off-peak rates and lossless publisher evidence archives, configs/model\_registry*.json and configs/evidence/, accessed as local audit artifacts, Nov. 24, 2026.
+\bibitem{artifacts} Project execution artifacts, source fingerprints, trials, evaluations and token ledgers, current inventory snapshot, Nov. 24, 2026.
 \end{thebibliography}
 \end{document}
