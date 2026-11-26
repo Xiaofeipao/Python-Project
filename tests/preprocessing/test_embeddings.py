@@ -6,11 +6,22 @@ from superagent.planning.search_space import next_candidate
 
 
 class EmbeddingTest(unittest.TestCase):
+    def test_hidden_text_enables_optional_encoder_without_explicit_flag(self):
+        from types import SimpleNamespace
+        from superagent.runtime.orchestrator import _minilm_available
+        env = {'packages': {'sentence-transformers': '5.7.0'}}
+        config = SimpleNamespace(enable_minilm=False, evaluation_stage='unseen')
+        self.assertTrue(_minilm_available(config, {'data_type': 'text'}, env))
+        self.assertFalse(_minilm_available(config, {'data_type': 'tabular'}, env))
+        self.assertFalse(_minilm_available(config, {'data_type': 'text'},
+                                           {'packages': {'sentence-transformers': None}}))
+
     def test_invalid_plan_cutoff_uses_local_fallback(self):
         from unittest.mock import patch
         from superagent.planning.llm import AutonomousPlanner
         planner = object.__new__(AutonomousPlanner)
         planner._invalid_plans = 2
+        planner._repair_used = True
         planner.output = 'unused'
         with patch('superagent.planning.llm.event') as logged, patch('superagent.planning.llm.write_json'):
             candidate, _ = planner.choose({'data_type':'tabular'}, [{'candidate':{'family':'dummy'},'status':'success','score':.5}], 'accuracy', 0)

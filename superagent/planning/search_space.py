@@ -2,6 +2,7 @@
 
 import json
 import importlib.util
+import statistics
 
 from sklearn.dummy import DummyClassifier
 from sklearn.calibration import CalibratedClassifierCV
@@ -11,7 +12,7 @@ from sklearn.naive_bayes import ComplementNB
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC, SVC
 
-from superagent.preprocessing.transformers import preprocessor
+from superagent.preprocessing.transformers import hybrid_preprocessor, preprocessor, tabular_preprocessor
 from superagent.evaluation.metrics import utility
 
 
@@ -19,8 +20,79 @@ def candidate_key(candidate):
     return json.dumps(candidate, sort_keys=True)
 
 
+def metric_candidates(profile, history, metric):
+    """Validation-compared variants, with fixed thresholds retained at refit."""
+    families = {'logistic', 'sgd', 'catboost', 'lightgbm', 'xgboost',
+                'hybrid_logistic', 'hybrid_sgd', 'hybrid_xgboost', 'extra_trees', 'random_forest'}
+    successful = sorted([h for h in history if h['status'] == 'success'
+                         and h['candidate']['family'] in families],
+                        key=lambda h: utility(h['score'], metric), reverse=True)
+    variants, seen = [], set()
+    for row in successful:
+        candidate = row['candidate']
+        if candidate['family'] in seen or len(seen) >= 3:
+            continue
+        seen.add(candidate['family'])
+        base = {k: v for k, v in candidate.items() if k not in {'decision_threshold', 'calibration'}}
+        if metric in {'f1_macro', 'f1_weighted', 'balanced_accuracy'} and len(profile.get('class_counts', {})) == 2:
+            variants += [dict(base, decision_threshold=t) for t in (.35, .65)]
+        elif (metric in {'log_loss', 'roc_auc'}
+              and min(profile.get('fitting_class_counts', profile.get('class_counts', {})).values(), default=0) >= 2):
+            variants.append(dict(base, calibration='sigmoid'))
+    return variants
+
+
+def allocate_candidates(candidates, profile, history):
+    """Allocate optional exploration from modality, scale and remaining time."""
+    remaining = profile.get('remaining_search_seconds')
+    if remaining is None:
+        return candidates
+    rows = profile.get('rows', 0)
+    costly = {'minilm_logistic', 'torch_pretrained', 'frozen_image_logistic', 'torch_ensemble', 'image_meta_blend', 'rbf_svm'}
+    eligible = [c for c in candidates if not (c['family'] in costly and remaining < 60)
+                and not (c['family'] == 'rbf_svm' and rows > 20000)]
+    # Preserve established general baselines before optional feature/encoder sweeps.
+    def priority(c):
+        family = c['family']
+        anchor = (family == 'cross_boost_blend' and profile['data_type'] == 'tabular'
+                  or family in {'logistic', 'pairwise_overlap'} and profile['data_type'] == 'text'
+                  and (c.get('analyzer') == 'char_wb' or family == 'pairwise_overlap')
+                  and not c.get('pairwise_word_features'))
+        return (0 if anchor else 1 if family == 'frozen_image_logistic'
+                else 2 if family in costly or c.get('feature_filter') else 1)
+    eligible.sort(key=priority)
+    limit = min(remaining, profile.get('trial_timeout_seconds', remaining))
+    measured = [h for h in history if h['status'] in {'success', 'failed', 'timeout'}]
+    affordable = []
+    for candidate in eligible:
+        relatives = [h for h in measured if h['candidate']['family'] == candidate['family']]
+        estimates = []
+        for row in relatives:
+            elapsed = row.get('wall_seconds_including_startup', row.get('elapsed_seconds', 0))
+            factor = max([1.] + [candidate.get(k, 1) / max(1, row['candidate'].get(k, 1))
+                                for k in ('iterations', 'epochs', 'gpu_seeds')])
+            if candidate.get('calibration') and not row['candidate'].get('calibration'):
+                factor *= 3
+            estimates.append(elapsed * factor)
+        if not estimates or statistics.median(estimates) * 1.25 <= limit:
+            affordable.append(candidate)
+    eligible = affordable
+    # Cover different families before spending the first eight slots tuning one.
+    if len(measured) < 8:
+        seen = {h['candidate']['family'] for h in history}
+        eligible.sort(key=lambda c: c['family'] in seen)
+    # After two attempts in one family, expose other families first.
+    if len(history) >= 3:
+        recent = [h['candidate']['family'] for h in history[-2:]]
+        if recent[0] == recent[1]:
+            eligible.sort(key=lambda c: c['family'] == recent[0])
+    return eligible
+
+
 def next_candidate(profile, history, metric):
     tried = {candidate_key(h["candidate"]) for h in history}
+    counts = list(profile.get("class_counts", {}).values())
+    imbalanced = bool(counts) and max(counts) / max(1, min(counts)) >= 2
     if not history:
         return {"family": "dummy"}, "Establish a class-prior baseline on the fixed validation split"
     if profile["data_type"] == "text":
@@ -58,7 +130,33 @@ def next_candidate(profile, history, metric):
         ensemble = dict(strong, family="torch_ensemble", ensemble_size=3)
         # Explore multiple neural configurations even when the first CPU trial
         # wins; a single small network is not a sufficient GPU comparison.
-        initial[1:1] = [strong, wider, ensemble]
+        if is_image and importlib.util.find_spec('torchvision') is not None:
+            pretrained = [
+                {'family': 'torch_pretrained', 'architecture': 'pretrained_resnet18',
+                 'size': size, 'epochs': 18, 'learning_rate': 3e-4, 'weight_decay': 1e-4,
+                 'dropout': 0.2, 'early_stopping': True, 'cosine_schedule': True,
+                 'augment': True, 'imagenet_normalize': True, 'tta': True}
+                for size in (96, 128)
+            ] + [
+                {'family': 'torch_pretrained', 'architecture': 'pretrained_resnet34',
+                 'size': 128, 'epochs': 14, 'learning_rate': 2e-4, 'weight_decay': 1e-4,
+                 'dropout': 0.2, 'early_stopping': True, 'cosine_schedule': True,
+                 'augment': True, 'imagenet_normalize': True, 'tta': True}
+            ]
+            pretrained.append(dict(pretrained[0], augment=False, tta=False))
+            initial[1:1] = pretrained + [strong, wider, ensemble]
+        else:
+            initial[1:1] = [strong, wider, ensemble]
+    if (profile['data_type'] == 'image' and profile.get('torch_available')
+            and importlib.util.find_spec('torchvision') is not None):
+        initial.insert(1, {'family': 'frozen_image_logistic', 'C': 1., 'size': 96})
+    if (profile['data_type'] == 'image' and large_gpu and profile.get('tabular_columns')
+            and importlib.util.find_spec('torchvision') is not None):
+        initial[0:0] = [
+            {'family': 'image_meta_blend', 'image_weight': weight, 'size': 96,
+             'epochs': 18, 'learning_rate': 3e-4, 'architecture': 'pretrained_resnet18'}
+            for weight in (.7, .5)
+        ]
     if profile['data_type'] == 'tabular' and importlib.util.find_spec('catboost') is not None:
         initial[0:0] = [
             {'family': 'catboost', 'iterations': 600, 'depth': 6, 'learning_rate': 0.05, 'l2_leaf_reg': 3},
@@ -106,24 +204,54 @@ def next_candidate(profile, history, metric):
                  'reg_lambda': 10, 'analyzer': 'combined', 'representation': 'separate',
                  'svd_components': 128} for depth in (3, 6)]
     if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) > 1:
-        initial.insert(0, {'family': 'text_blend', 'linear_weight': .5, 'C': .1})
+        blends = [{'family': 'text_blend', 'linear_weight': .5, 'C': .1}]
+        if len(profile['text_columns']) == 2:
+            # Keep the original separate-column blend untouched; this new
+            # family fuses signed char_wb and word differences for pairs.
+            blends.insert(0, {'family': 'text_blend_diff', 'linear_weight': .5, 'C': .1})
+        initial[0:0] = blends
     if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) == 2:
         pairwise = {'family':'logistic','C':1.,'analyzer':'char_wb',
                     'representation':'difference','fit_intercept':False,
                     'vectorizer_options':{'ngram_range':[3,6]}}
-        initial[0:0] = [pairwise, dict(pairwise,pairwise_word_features=True)]
         overlap = {'family':'pairwise_overlap','C':1.,'fit_intercept':True,
                    'vectorizer_options':{'ngram_range':[3,6]}}
-        initial[2:2] = [overlap]
+        # Pairwise tasks get the signed overlap anchor before single-text
+        # logistic variants; this remains modality/shape-based, not task-specific.
+        initial[0:0] = [overlap, pairwise, dict(pairwise,pairwise_word_features=True)]
+    if profile['data_type'] == 'text' and profile.get('tabular_columns'):
+        hybrid = [{'family': 'hybrid_logistic', 'C': 1., 'analyzer': 'combined'},
+                  {'family': 'hybrid_logistic', 'C': .1, 'analyzer': 'word'}]
+        if imbalanced:
+            hybrid.insert(0, {'family': 'hybrid_logistic', 'C': 1., 'analyzer': 'combined',
+                              'class_weight': 'balanced'})
+        hybrid.append({'family': 'hybrid_sgd', 'alpha': 1e-4, 'analyzer': 'combined'})
+        if importlib.util.find_spec('xgboost') is not None:
+            hybrid += [{'family': 'hybrid_xgboost', 'iterations': 800, 'depth': 6,
+                        'learning_rate': .05, 'reg_lambda': 10, 'analyzer': 'combined',
+                        'text_max_features': 6000},
+                       {'family': 'hybrid_xgboost', 'iterations': 1600, 'depth': 4,
+                        'learning_rate': .03, 'reg_lambda': 20, 'analyzer': 'combined',
+                        'text_max_features': 6000}]
+            if imbalanced:
+                hybrid.insert(0, {'family': 'hybrid_xgboost', 'iterations': 1000, 'depth': 5,
+                                  'learning_rate': .04, 'reg_lambda': 10, 'analyzer': 'combined',
+                                  'text_max_features': 6000, 'balanced': True})
+        initial[0:0] = hybrid
     if profile['data_type'] == 'tabular' and large_gpu and importlib.util.find_spec('xgboost') is not None:
-        initial[0:0] = [{'family': 'cross_boost_blend'}] + [
-            {'family': 'cross_boost_blend', 'gpu_weight': weight} for weight in (.1, .5, .75)] + [
+        initial[0:0] = [
+            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .275, 'leaf_weight': 0.},
+            {'family': 'cross_boost_blend'},
+            {'family': 'cross_boost_blend', 'gpu_weight': .1},
+            {'family': 'cross_boost_blend', 'gpu_weight': .5},
+            {'family': 'cross_boost_blend', 'gpu_weight': .75},
+            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': 0.},
+            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .5, 'leaf_weight': 0.},
+            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': .15},
+        ] + [
             {'family': 'xgboost', 'iterations': count, 'depth': depth, 'learning_rate': .03,
              'reg_lambda': regularization} for count, depth, regularization in
             ((2000, 4, 10), (1600, 6, 10), (1200, 8, 20))]
-        initial[1:1] = [
-            {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': weight,
-             'leaf_weight': leaf} for weight, leaf in ((.25, 0.), (.5, 0.), (.25, .15))]
     if profile.get('minilm_available') and profile['data_type'] in {'tabular', 'text'}:
         from superagent.models.text_encoder import MODEL_ID, REVISION
         initial[0:0] = [{'family': 'minilm_logistic', 'C': c, 'encoder': MODEL_ID,
@@ -138,8 +266,23 @@ def next_candidate(profile, history, metric):
                        dict(base,feature_filter='mutual_info',percentile=50,
                             **({'svd_components':64} if profile['data_type']=='text' and base.get('representation') else {})),
                        base]
-    for candidate in initial:
+    if imbalanced and profile['data_type'] == 'tabular':
+        balanced = []
+        if importlib.util.find_spec('catboost') is not None:
+            balanced.append({'family': 'catboost', 'iterations': 1200, 'depth': 8,
+                             'learning_rate': .05, 'l2_leaf_reg': 5, 'balanced': True})
+        if importlib.util.find_spec('xgboost') is not None:
+            balanced.append({'family': 'xgboost', 'iterations': 1600, 'depth': 6,
+                             'learning_rate': .03, 'reg_lambda': 10, 'balanced': True})
+        initial[0:0] = balanced
+    initial = metric_candidates(profile, history, metric) + initial
+    for candidate in allocate_candidates(initial, profile, history):
         if candidate_key(candidate) not in tried:
+            if candidate.get('calibration') or candidate.get('decision_threshold') is not None:
+                observed = [h['score'] for h in history if h['status'] == 'success'
+                            and h['candidate']['family'] == candidate['family']]
+                best_score = max(observed, key=lambda score: utility(score, metric))
+                return candidate, f"Compare a metric-specific {candidate['family']} decision using observed {metric}={best_score:.6g}"
             return candidate, f"Compare a general {candidate['family']} method for {profile['data_type']} data"
     successful = [h for h in history if h["status"] == "success" and h["candidate"]["family"] != "dummy"]
     successful.sort(key=lambda h: utility(h["score"], metric), reverse=True)
@@ -156,18 +299,48 @@ def next_candidate(profile, history, metric):
         if family == "catboost":
             variants = [dict(candidate, iterations=1200), dict(candidate, depth=5),
                         dict(candidate, learning_rate=0.025), dict(candidate, l2_leaf_reg=10)]
+            if imbalanced:
+                variants.insert(0, dict(candidate, balanced=True))
         elif family == 'lightgbm':
             variants = [dict(candidate, num_leaves=value) for value in (15, 63, 127)]
             variants += [dict(candidate, iterations=value) for value in (400, 1600)]
+            if imbalanced:
+                variants.insert(0, dict(candidate, balanced=True))
         elif family in {'catboost_ensemble', 'tabular_blend', 'minilm_logistic'}:
             variants = []
         elif family == 'xgboost':
             variants = [dict(candidate, reg_lambda=value) for value in (1, 20, 50)]
+            if imbalanced:
+                variants.insert(0, dict(candidate, balanced=True))
+        elif family == 'image_meta_blend':
+            variants = [dict(candidate, image_weight=value) for value in (.3, .9)]
+        elif family == 'frozen_image_logistic':
+            variants = [dict(candidate, C=c) for c in (.1, 10.)]
+        elif family == 'torch_pretrained':
+            variants = [dict(candidate, learning_rate=rate) for rate in (1e-4, 1e-3)]
+            variants += [dict(candidate, epochs=candidate["epochs"] + 4),
+                         dict(candidate, weight_decay=1e-3)]
+        elif family in {'hybrid_logistic'}:
+            variants = [dict(candidate, C=value) for value in (.03, .3, 3., 10.)]
+            variants += [dict(candidate, class_weight='balanced')]
+            variants += [dict(candidate, fit_intercept=not candidate.get('fit_intercept', True))]
+        elif family == 'hybrid_sgd':
+            variants = [dict(candidate, alpha=value) for value in (1e-5, 1e-3, 1e-2)]
+        elif family == 'hybrid_xgboost':
+            variants = [dict(candidate, depth=value) for value in (4, 8)]
+            variants += [dict(candidate, iterations=value) for value in (400, 1600)]
+            variants += [dict(candidate, reg_lambda=value) for value in (1., 40.)]
+            variants += [dict(candidate, learning_rate=value) for value in (.02, .08)]
         elif family == 'cross_boost_blend':
             variants = []
         elif family == 'text_blend':
             variants = [dict(candidate, linear_weight=w) for w in (.25, .75)]
             variants += [dict(candidate, C=c) for c in (.03, .3)]
+        elif family == 'text_blend_diff':
+            variants = [dict(candidate, linear_weight=w) for w in (.25, .75)]
+            variants += [dict(candidate, C=c) for c in (.03, .3)]
+            variants += [dict(candidate, linear_weight=.4, C=.03),
+                         dict(candidate, linear_weight=.6, C=.3)]
         elif family == 'pairwise_overlap':
             variants = [dict(candidate, C=value) for value in (.3, 3.)]
             variants += [dict(candidate, fit_intercept=not candidate.get('fit_intercept', True)),
@@ -192,7 +365,7 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, alpha=value) for value in (0.0001, 0.001, 0.01)]
         if imbalanced and family in {"logistic", "extra_trees", "random_forest"}:
             variants.insert(0, dict(candidate, class_weight="balanced"))
-        for variant in variants:
+        for variant in allocate_candidates(variants, profile, history):
             if candidate_key(variant) not in tried:
                 return variant, f"Refine {family} using observed {metric}={best['score']:.6g}"
     fallback = {"family": "sgd", "alpha": 0.0001}
@@ -211,11 +384,71 @@ def build_model(profile, candidate, config):
         from superagent.preprocessing.feature_selection import FeatureFilter
         model.steps.insert(-1, ('feature_filter', FeatureFilter(candidate['feature_filter'],
                            candidate.get('percentile',50),config.seed)))
+    if candidate.get('decision_threshold') is not None or candidate.get('calibration'):
+        from superagent.models.decision import DecisionClassifier
+        model = Pipeline([('preprocess', 'passthrough'), ('classifier', DecisionClassifier(
+            model, threshold=candidate.get('decision_threshold'), calibration=candidate.get('calibration'),
+            positive_label=config.positive_label))])
     return model
 
 
 def _build_model(profile, candidate, config):
     family = candidate["family"]
+    if family == 'frozen_image_logistic':
+        from superagent.models.neural import FrozenImageFeatures
+        if profile['data_type'] != 'image':
+            raise ValueError('Frozen image features require image input')
+        return Pipeline([('preprocess', FrozenImageFeatures(profile['image_column'], config.image_root,
+                    size=candidate.get('size', 96), device=config.device, threads=config.threads,
+                    batch_size=candidate.get('batch_size', 32), random_state=config.seed,
+                    pretrained=candidate.get('pretrained', True))),
+                         ('classifier', LogisticRegression(C=candidate.get('C', 1.), max_iter=1200,
+                                                          random_state=config.seed))])
+    if family == 'hybrid_logistic':
+        return Pipeline([('preprocess', hybrid_preprocessor(profile, candidate)),
+                         ('classifier', LogisticRegression(C=candidate.get('C', 1.),
+                                                           class_weight=candidate.get('class_weight'),
+                                                           fit_intercept=candidate.get('fit_intercept', True),
+                                                           solver='lbfgs', max_iter=1200,
+                                                           random_state=config.seed))])
+    if family == 'hybrid_sgd':
+        return Pipeline([('preprocess', hybrid_preprocessor(profile, candidate)),
+                         ('classifier', SGDClassifier(loss='log_loss', alpha=candidate.get('alpha', 1e-4),
+                                                      max_iter=1500, tol=1e-4,
+                                                      random_state=config.seed))])
+    if family == 'hybrid_xgboost':
+        from superagent.models.tabular import EncodedXGBoost
+        return Pipeline([('preprocess', hybrid_preprocessor(profile, candidate)),
+                         ('classifier', EncodedXGBoost(
+                             iterations=candidate.get('iterations', 800),
+                             depth=candidate.get('depth', 6),
+                             learning_rate=candidate.get('learning_rate', .05),
+                             reg_lambda=candidate.get('reg_lambda', 10),
+                             threads=config.threads, balanced=candidate.get('balanced', False),
+                             device=candidate.get('device', 'auto'),
+                             random_state=config.seed))])
+    if family == 'image_meta_blend':
+        from superagent.models.tabular import ProbabilityBlend
+        image = {'family': 'torch_pretrained', 'architecture': candidate.get('architecture', 'pretrained_resnet18'),
+                 'size': candidate.get('size', 96), 'epochs': candidate.get('epochs', 18),
+                 'learning_rate': candidate.get('learning_rate', 3e-4), 'weight_decay': 1e-4,
+                 'dropout': .2, 'early_stopping': True, 'cosine_schedule': True,
+                 'augment': True, 'imagenet_normalize': True, 'tta': True,
+                 'pretrained': candidate.get('pretrained', True)}
+        meta = dict(profile, data_type='tabular', image_column=None, text_columns=None,
+                    features=profile['tabular_columns'],
+                    numeric_columns=profile['numeric_columns'],
+                    categorical_columns=profile['categorical_columns'],
+                    datetime_columns=profile.get('datetime_columns', []))
+        if importlib.util.find_spec('catboost') is not None:
+            meta_candidate = {'family': 'catboost', 'iterations': candidate.get('meta_iterations', 900),
+                              'depth': 6, 'learning_rate': .05, 'l2_leaf_reg': 5}
+        else:
+            meta_candidate = {'family': 'logistic', 'C': 1.}
+        members = [build_model(profile, image, config), build_model(meta, meta_candidate, config)]
+        weight = candidate.get('image_weight', .7)
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', ProbabilityBlend(members, weights=[weight, 1 - weight]))])
     if family == 'minilm_logistic':
         from superagent.models.text_encoder import MiniLMFeatures
         from sklearn.preprocessing import StandardScaler
@@ -232,6 +465,15 @@ def _build_model(profile, candidate, config):
                     'representation': 'separate', 'class_weight': 'balanced'}, config),
                    build_model(profile, {'family': 'linear_svm', 'C': candidate.get('C', .1),
                     'analyzer': 'combined', 'representation': 'separate'}, config)]
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', ProbabilityBlend(members, weights=[weight, 1-weight]))])
+    if family == 'text_blend_diff':
+        from superagent.models.tabular import ProbabilityBlend
+        weight = candidate.get('linear_weight', .5)
+        members = [build_model(profile, {'family': 'logistic', 'C': 1., 'analyzer': 'char_wb',
+                    'representation': 'difference', 'class_weight': 'balanced'}, config),
+                   build_model(profile, {'family': 'linear_svm', 'C': candidate.get('C', .1),
+                    'analyzer': 'word', 'representation': 'difference'}, config)]
         return Pipeline([('preprocess', 'passthrough'),
                          ('classifier', ProbabilityBlend(members, weights=[weight, 1-weight]))])
     if family == 'pairwise_overlap':
@@ -262,7 +504,8 @@ def _build_model(profile, candidate, config):
 
         estimator = NativeBoostClassifier(iterations=candidate['iterations'], depth=candidate['depth'],
                                           learning_rate=candidate['learning_rate'],
-                                          l2_leaf_reg=candidate['l2_leaf_reg'], threads=config.threads, **common)
+                                          l2_leaf_reg=candidate['l2_leaf_reg'], threads=config.threads,
+                                          balanced=candidate.get('balanced', False), **common)
     elif family in {'lightgbm', 'catboost_ensemble', 'tabular_blend'}:
         from superagent.models.tabular import advanced_estimator
 
@@ -271,7 +514,7 @@ def _build_model(profile, candidate, config):
         from superagent.models.tabular import EncodedXGBoost
         estimator = EncodedXGBoost(iterations=candidate['iterations'], depth=candidate['depth'],
                                     learning_rate=candidate['learning_rate'], reg_lambda=candidate['reg_lambda'],
-                                    threads=config.threads, **common)
+                                    threads=config.threads, balanced=candidate.get('balanced', False), **common)
     elif family == 'cross_boost_blend':
         from superagent.models.tabular import ProbabilityBlend, NativeBoostClassifier, EncodedXGBoost, NativeLeafBoost
         encoded = [Pipeline([('preprocess', preprocessor(profile, {'family': 'xgboost'}, config.image_root)),
@@ -293,11 +536,13 @@ def _build_model(profile, candidate, config):
     elif family == "sgd":
         estimator = SGDClassifier(loss="log_loss", alpha=candidate["alpha"], max_iter=1500,
                                   tol=1e-4, **common)
-    elif family in {"torch_mlp", "torch_cnn", "torch_resnet", "torch_ensemble"}:
+    elif family in {"torch_mlp", "torch_cnn", "torch_resnet", "torch_ensemble", "torch_pretrained"}:
         from superagent.models.neural import TorchClassifier, TorchEnsemble
 
+        default_architecture = ("cnn" if family == "torch_cnn" else
+                                "pretrained_resnet18" if family == "torch_pretrained" else "mlp")
         params = dict(
-            architecture=candidate.get("architecture", "cnn" if family == "torch_cnn" else "mlp"), hidden=candidate["hidden"],
+            architecture=candidate.get("architecture", default_architecture),
             epochs=candidate["epochs"], learning_rate=candidate["learning_rate"],
             weight_decay=candidate["weight_decay"], image_size=candidate.get("size", 32),
             threads=config.threads, batch_size=config.neural_batch_size,
@@ -306,7 +551,11 @@ def _build_model(profile, candidate, config):
             dropout=candidate.get("dropout", 0.1), early_stopping=candidate.get("early_stopping", False),
             augment=candidate.get("augment", False), cosine_schedule=candidate.get("cosine_schedule", False),
             normalize_images=candidate.get("normalize_images", False),
+            imagenet_normalize=candidate.get("imagenet_normalize", False),
+            pretrained=candidate.get("pretrained", True), tta=candidate.get("tta", False),
         )
+        if family != "torch_pretrained":
+            params["hidden"] = candidate["hidden"]
         if family == "torch_ensemble":
             estimator = TorchEnsemble(member_params=params, size=candidate.get("ensemble_size", 3),
                                       device=config.device, **common)
@@ -317,7 +566,9 @@ def _build_model(profile, candidate, config):
     if family in {"catboost", "lightgbm", "catboost_ensemble", "tabular_blend", "cross_boost_blend"}:
         from superagent.models.tabular import NativeCategories
 
-        return Pipeline([("preprocess", NativeCategories(profile['features'], profile['numeric_columns'])),
+        return Pipeline([("preprocess", NativeCategories(
+            profile.get('tabular_columns') or profile['features'],
+            profile['numeric_columns'], profile.get('datetime_columns', []))),
                          ("classifier", estimator)])
     return Pipeline([("preprocess", preprocessor(profile, candidate, config.image_root)),
                      ("classifier", estimator)])

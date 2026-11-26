@@ -14,7 +14,7 @@
       "response_model_ids": [
         "DeepSeek-V4-Pro"
       ],
-      "pricing_note": "Official off-peak cache-miss rates effective 2026-08-17. Not school invoice.",
+      "pricing_note": "User-requested fixed off-peak accounting at official rates effective 2026-08-17: CNY 4.5 input / 13.5 output per million tokens; all input at cache-miss rate. Not the school platform actual charge.",
       "deployment_note": "School returns DeepSeek-V4-Pro; exact revision not independently attested",
       "evidence": [
         {

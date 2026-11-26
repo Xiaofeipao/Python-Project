@@ -1,6 +1,7 @@
 """Portable general tabular estimators, independent of dataset identity."""
 
 import numpy as np
+import pandas as pd
 from joblib import Memory
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
@@ -9,23 +10,39 @@ from superagent.preprocessing.transformers import FrameSchema
 
 
 class NativeCategories(FrameSchema):
+    def __init__(self, columns, numeric, datetime=()):
+        super().__init__(columns, numeric, datetime)
+
     def transform(self, X):
         frame = super().transform(X)
-        for column in self.columns:
-            if column not in self.numeric:
+        for column in self.datetime:
+            parsed = frame[column]
+            parts = pd.DataFrame({
+                f"{column}__year": parsed.dt.year.astype(float),
+                f"{column}__month": parsed.dt.month.astype(float),
+                f"{column}__day": parsed.dt.day.astype(float),
+                f"{column}__weekday": parsed.dt.weekday.astype(float),
+                f"{column}__hour": parsed.dt.hour.astype(float),
+            }, index=frame.index)
+            frame = pd.concat([frame.drop(columns=[column]), parts], axis=1)
+        for column in frame.columns:
+            if column not in self.numeric and pd.api.types.is_numeric_dtype(frame[column]):
+                frame[column] = frame[column].astype(float)
+            elif column not in self.numeric:
                 frame[column] = frame[column].fillna("__missing__").astype(str).astype(object)
         return frame
 
 
 class NativeBoostClassifier(ClassifierMixin, BaseEstimator):
     def __init__(self, iterations=600, depth=6, learning_rate=0.05, l2_leaf_reg=3,
-                 random_state=42, threads=1):
+                 random_state=42, threads=1, balanced=False):
         self.iterations = iterations
         self.depth = depth
         self.learning_rate = learning_rate
         self.l2_leaf_reg = l2_leaf_reg
         self.random_state = random_state
         self.threads = threads
+        self.balanced = balanced
 
     def fit(self, X, y):
         from catboost import CatBoostClassifier
@@ -35,7 +52,8 @@ class NativeBoostClassifier(ClassifierMixin, BaseEstimator):
         self.model_ = CatBoostClassifier(iterations=self.iterations, depth=self.depth,
                                         learning_rate=self.learning_rate, l2_leaf_reg=self.l2_leaf_reg,
                                         random_seed=self.random_state, thread_count=self.threads,
-                                        cat_features=categorical, verbose=False, allow_writing_files=False)
+                                        cat_features=categorical, verbose=False, allow_writing_files=False,
+                                        auto_class_weights='Balanced' if self.balanced else None)
         # No external validation/test rows enter target statistics or fitting.
         self.model_.fit(X, encoded)
         self.n_features_in_ = X.shape[1]
@@ -74,7 +92,7 @@ class BalancedRandomForest(BalancedWeights, RandomForestClassifier):
 
 class NativeLeafBoost(ClassifierMixin, BaseEstimator):
     def __init__(self, iterations=800, num_leaves=31, learning_rate=0.035,
-                 min_child_samples=30, reg_lambda=5, random_state=42, threads=1):
+                 min_child_samples=30, reg_lambda=5, random_state=42, threads=1, balanced=False):
         self.iterations = iterations
         self.num_leaves = num_leaves
         self.learning_rate = learning_rate
@@ -82,6 +100,7 @@ class NativeLeafBoost(ClassifierMixin, BaseEstimator):
         self.reg_lambda = reg_lambda
         self.random_state = random_state
         self.threads = threads
+        self.balanced = balanced
 
     def _frame(self, X):
         import pandas as pd
@@ -100,7 +119,11 @@ class NativeLeafBoost(ClassifierMixin, BaseEstimator):
                                      learning_rate=self.learning_rate, min_child_samples=self.min_child_samples,
                                      reg_lambda=self.reg_lambda, random_state=self.random_state,
                                      n_jobs=self.threads, verbosity=-1)
-        self.model_.fit(self._frame(X), encoded)
+        weight = None
+        if self.balanced:
+            counts = np.bincount(encoded, minlength=len(self.classes_))
+            weight = (len(encoded) / (len(counts) * counts))[encoded]
+        self.model_.fit(self._frame(X), encoded, sample_weight=weight)
         self.n_features_in_ = X.shape[1]
         return self
 
@@ -113,7 +136,7 @@ class NativeLeafBoost(ClassifierMixin, BaseEstimator):
 
 class EncodedXGBoost(ClassifierMixin, BaseEstimator):
     def __init__(self, iterations=1600, depth=6, learning_rate=.03, reg_lambda=10,
-                 random_state=42, threads=1, device='auto'):
+                 random_state=42, threads=1, device='auto', balanced=False):
         self.iterations = iterations
         self.depth = depth
         self.learning_rate = learning_rate
@@ -121,6 +144,7 @@ class EncodedXGBoost(ClassifierMixin, BaseEstimator):
         self.random_state = random_state
         self.threads = threads
         self.device = device
+        self.balanced = balanced
 
     def fit(self, X, y):
         from xgboost import XGBClassifier
@@ -137,7 +161,11 @@ class EncodedXGBoost(ClassifierMixin, BaseEstimator):
             learning_rate=self.learning_rate, reg_lambda=self.reg_lambda,
             subsample=.85, colsample_bytree=.85, min_child_weight=3,
             random_state=self.random_state, n_jobs=self.threads, tree_method='hist', device=device)
-        self.model_.fit(X, encoded)
+        weight = None
+        if self.balanced:
+            counts = np.bincount(encoded, minlength=len(self.classes_))
+            weight = (len(encoded) / (len(counts) * counts))[encoded]
+        self.model_.fit(X, encoded, sample_weight=weight)
         self.resource_report_ = {'device': device, 'backend': 'xgboost', 'training_rows': X.shape[0]}
         # Use CPU inference so the saved pipeline does not require CUDA.
         self.model_.set_params(device='cpu')
@@ -195,12 +223,16 @@ def advanced_estimator(candidate, config):
         return NativeLeafBoost(iterations=candidate['iterations'], num_leaves=candidate['num_leaves'],
                                learning_rate=candidate['learning_rate'],
                                min_child_samples=candidate['min_child_samples'], reg_lambda=candidate['reg_lambda'],
-                               random_state=config.seed, threads=config.threads)
+                               random_state=config.seed, threads=config.threads,
+                               balanced=candidate.get('balanced', False))
     base = dict(iterations=candidate.get('iterations', 1200), depth=candidate.get('depth', 8),
                 learning_rate=candidate.get('learning_rate', .05), l2_leaf_reg=candidate.get('l2_leaf_reg', 5),
                 threads=config.threads)
     if family == 'catboost_ensemble':
-        return ProbabilityBlend([NativeBoostClassifier(**base, random_state=config.seed + 101 * index)
+        return ProbabilityBlend([NativeBoostClassifier(**base, balanced=candidate.get('balanced', False),
+                                                       random_state=config.seed + 101 * index)
                                  for index in range(3)])
-    return ProbabilityBlend([NativeBoostClassifier(**base, random_state=config.seed),
-                             NativeLeafBoost(random_state=config.seed, threads=config.threads)])
+    return ProbabilityBlend([NativeBoostClassifier(**base, balanced=candidate.get('balanced', False),
+                                                   random_state=config.seed),
+                             NativeLeafBoost(random_state=config.seed, threads=config.threads,
+                                             balanced=candidate.get('balanced', False))])

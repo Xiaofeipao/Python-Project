@@ -4,6 +4,8 @@ Each topic has one primary owner:
 
 - `architecture.md`: source layers, responsibilities and execution flow.
 - `guides/quickstart.md`: commands and output locations.
+- `guides/reproducible_environment.md`: matched torch/torchvision setup, exact environment snapshot and pinned weight provenance.
+- `guides/requirements_status.md`: one-agent design, final-only test evaluation and remaining submission evidence.
 - `guides/api_usage.md`: credentials, API behavior, pricing and reconciliation operations.
 - `guides/full_assignment_workflow.md`: frozen formal evaluation and submission.
 - `accounting/README.md`: interpretation of the current ledger record set.

@@ -28,17 +28,22 @@ The planner rejects missing/invalid choices or messages, empty/non-text content,
 
 This integration changes planning response handling only. It does not import the supplied package's fitted classifiers, candidate-ranking results or reported accuracy. Existing best models and their supporting artifacts remain unchanged.
 
-A development check on 2026-11-23 accepted one live Flash plan using the integrated handler: 1017 input tokens, 465 output tokens and CNY 0.002877 at the registered off-peak rates. No classifier training occurred. The task's historical accounting remains incomplete; this successful call does not reconcile previous timeouts. Local evidence is under runs/llm_fix_smoke_20261123/.
+A development check on 2026-11-23 accepted one live Flash plan using the integrated handler: 1017 input tokens, 465 output tokens and CNY 0.002877 at the then-registered off-peak rates. No classifier training occurred. That historical smoke charge is retained for audit. Local evidence is under runs/llm_fix_smoke_20261123/.
 
-## Fixed accounting convention
+## Off-peak accounting convention
 
-Registered off-peak prices per million tokens: Flash CNY 1 input / 4 output (effective 2026-09-10); Pro CNY 4.5 input / 13.5 output (effective 2026-08-17). Every input token uses the cache-miss rate. Historical publisher evidence and hashes are preserved; these calculations are distinct from platform invoices. Exact school deployment revisions remain unverified.
+Registered user-selected off-peak prices per million tokens: Flash CNY 1 input / 4 output (effective 2026-09-10); Pro CNY 4.5 input / 13.5 output (effective 2026-08-17). Every input token uses the cache-miss rate; cache discounts and free credits are excluded. Historical publisher evidence and hashes are preserved; these calculations are distinct from platform invoices. Exact school deployment revisions remain unverified. Earlier standard/peak ledgers are retained as historical audit records and must not be reported as the final off-peak run.
 
 Task-wide ledgers retain calls across attempts. Known costs, unresolved worst-case reservations and the next reservation must fit the CNY 20 ceiling. Actual costs use returned tokens, including reasoning tokens counted by the provider. Missing usage is not assumed zero; reservations are not charges.
 
 --provisional-accounting is development-only. It preserves historical unknowns and marks accounting_provisional=true and eligible_for_formal_submission=false. Formal released/unseen runs require reconciled accounting and one persistent absolute SUPERAGENT_USAGE_ROOT. Do not create a new ledger to evade historical usage.
 
-Two consecutive invalid structured plans disable further API planning for that run. Accepted plans reset that counter. Local fallback remains logged and must not be presented as an LLM decision. Ambiguous requests are not blindly retried. Recovery preserves the original ledger and uses local planning for its first restored decision.
+Complete accounting alone never certifies formal eligibility. Current summaries
+also distinguish formal_runtime_checks_passed from submission_review_required.
+There is one runtime planner identity. Fitting workers receive no planner API
+credential and cannot make calls on behalf of another runtime agent.
+
+After two consecutive invalid structured plans, the next decision may make one shorter repair request using a listed seed and empty overrides. It consumes one separately reserved and recorded API call. If repair fails, planning stays local. Success resets the consecutive failure counter, but the repair allowance is never renewed within the run. Recovery preserves that allowance, the original ledger and the local first restored decision. Unknown-usage timeouts are never automatically replayed. Local fallback is logged and must not be presented as an LLM decision.
 
 ## Reconciling unrecoverable usage
 
@@ -53,7 +58,7 @@ python scripts/api/reconcile_usage.py --ledger-dir .model_usage/<task-hash> --ev
   --call-id <call-id> --basis "Why usage is unrecoverable" --evidence "<original request path>" --apply
 ```
 
-`--apply` requires a basis and evidence; an evidence path must exist. The record books the call's worst-case reservation (CNY 5.24288 for Flash) as an explicit upper-bound charge, keeps input/output token counts absent, and stores the basis, evidence path, author and timestamp in `ledger.json`, `calls.jsonl` and `<ledger>/reconciliation.json`. `unreconciled_reserved_rmb` drops to zero while `conservative_reconciled_cost_rmb` and `charged_total_cost_rmb` report the bounded charge.
+`--apply` requires a basis and evidence; an evidence path must exist. The record books the call's worst-case reservation (CNY 1.06496 for a 4096-output Flash request under off-peak 1/4 pricing) as an explicit upper-bound charge, keeps input/output token counts absent, and stores the basis, evidence path, author and timestamp in `ledger.json`, `calls.jsonl` and `<ledger>/reconciliation.json`. `unreconciled_reserved_rmb` drops to zero while `conservative_reconciled_cost_rmb` and `charged_total_cost_rmb` report the bounded charge. Older reservations remain at the amount recorded when the call was made.
 
 `accounting_complete` deliberately stays false: the charge is bounded, the actual usage is not known. A reconciled task still refuses new model requests under the default policy and remains ineligible for formal submission; only provider-supplied usage can close the gap. This is a description of the tool, not a statement that any current ledger contains such a record. The current record set and totals are indexed in ../accounting/ledger_inventory.json.
 

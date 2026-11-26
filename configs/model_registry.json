@@ -14,7 +14,7 @@
       "response_model_ids": [
         "DeepSeek-V4.1-Flash"
       ],
-      "pricing_note": "User-requested fixed off-peak accounting at official rates effective 2026-09-10; cache-miss rate for all input. Not the school platform actual charge.",
+      "pricing_note": "User-requested fixed off-peak accounting at official rates effective 2026-09-10: CNY 1 input / 4 output per million tokens; all input at cache-miss rate. Not the school platform actual charge.",
       "deployment_note": "School platform returns DeepSeek-V4.1-Flash; exact revision not independently attested. Development API experiment.",
       "evidence": [
         {

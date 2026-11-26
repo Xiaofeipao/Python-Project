@@ -1,10 +1,44 @@
-"""Resume only verified completed trials; preserve elapsed time and API ledger."""
+"""Atomic model checkpoints, verified recovery and run locks."""
 import json
 import contextlib
 import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+
+def save_solution(model, metadata, destination):
+    """Persist a fitted pipeline without depending on its training disk cache."""
+    import joblib
+    model.memory = None
+    estimator = model.named_steps['classifier']
+    if hasattr(estimator, 'cache_dir'):
+        estimator.set_params(cache_dir=None)
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(destination.name + '.tmp')
+    joblib.dump({'model': model, 'metadata': metadata}, temporary)
+    os.replace(temporary, destination)
+
+
+def restore_validated_solution(record, source_hash, usage, destination):
+    """Publish a verified train-only checkpoint after search has ended."""
+    import joblib
+    from superagent.preprocessing.datasets import file_hash
+    checkpoint = record.get('checkpoint_path')
+    if not checkpoint or not Path(checkpoint).is_file():
+        return False
+    digest = file_hash(checkpoint)
+    if digest != record.get('checkpoint_sha256'):
+        raise ValueError('Validated checkpoint SHA256 mismatch')
+    artifact = joblib.load(checkpoint)
+    metadata = artifact['metadata']
+    if metadata['source_sha256'] != source_hash:
+        raise ValueError('Validated checkpoint source differs from current runtime')
+    metadata.update(model_usage=usage, partial=True, fit_scope='training_split_only',
+                    validation_score=record['score'], origin_checkpoint_sha256=digest)
+    save_solution(artifact['model'], metadata, destination)
+    return True
 
 
 def process_alive(pid):
@@ -55,7 +89,7 @@ def run_lock(folder):
 def load_resume(folder, config):
     folder = Path(folder).resolve()
     manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-    if manifest['config'] != config.to_dict():
+    if manifest.get('requested_config', manifest['config']) != config.to_dict():
         raise ValueError('Resume requires exactly the original configuration')
     summary = folder / 'summary.json'
     if summary.exists() and json.loads(summary.read_text())['status'] == 'completed':
@@ -96,6 +130,7 @@ def load_resume(folder, config):
         elif entry.get('event')=='llm_plan_selected':
             invalid=0;rejection=None
     feedback.update(consecutive_invalid_plans=invalid,last_rejection=rejection)
+    feedback['repair_used'] = feedback.get('repair_used', False) or any(e.get('event') == 'llm_repair_started' for e in events)
     reflections=(feedback.get('restored_reflections',[])+[{k:e.get(k) for k in ('diagnosis','next_action','candidate')} for e in events if e.get('event')=='llm_plan_selected'])[-3:]
     usage=json.loads((folder/'model_usage.json').read_text(encoding='utf-8'))
     ledger_path=Path(usage['ledger_path']).resolve()

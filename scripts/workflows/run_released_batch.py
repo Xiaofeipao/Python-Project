@@ -1,4 +1,4 @@
-"""Run configured released tasks serially; print scores only after both finish."""
+"""Run released tasks serially in development, without freezing or selecting by test score."""
 
 
 import json
@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 from scripts.data.convert_numpy_task import convert_split
+from superagent.governance.frozen_bundle import runtime_fingerprint
 
 
 def invoke(folder, entry, *args):
@@ -25,41 +26,68 @@ def invoke(folder, entry, *args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, default=ROOT / 'runs/released_gpu_batch_20261111')
+    parser.add_argument('--policy', type=Path, default=ROOT / 'configs/final_policy.json',
+                        help='Policy JSON; CLI overrides below take precedence')
     parser.add_argument('--tasks', nargs='+', choices=['coupon', 'headlines'], default=['coupon', 'headlines'])
-    parser.add_argument('--max-trials', type=int, default=10)
+    parser.add_argument('--max-trials', type=int, default=None)
     parser.add_argument('--llm-registry', type=Path, help='Enable API planning using this model registry')
     parser.add_argument('--llm-model', default='DeepSeek-V4.1-Flash')
     parser.add_argument('--key-file', type=Path, help='Read credentials locally; never copied to outputs')
-    parser.add_argument('--time-budget', type=float, default=7200)
+    parser.add_argument('--time-budget', type=float, default=None)
     parser.add_argument('--provisional-accounting', action='store_true')
-    parser.add_argument('--llm-output-tokens', type=int, default=4096)
-    parser.add_argument('--enable-minilm', action='store_true', help='Compare optional frozen MiniLM features')
-    parser.add_argument('--stability-repeats', type=int, choices=[1, 2, 3], default=1)
-    parser.add_argument('--trial-timeout', type=float, default=600)
-    parser.add_argument('--search-patience', type=int, default=0)
-    parser.add_argument('--feature-search', action='store_true')
-    parser.add_argument('--nested-cv-folds', type=int, choices=[0,2,3], default=0)
+    parser.add_argument('--llm-output-tokens', type=int, default=None)
+    parser.add_argument('--llm-timeout-seconds', type=float, default=None)
+    parser.add_argument('--enable-minilm', action='store_true', default=None, help='Compare optional frozen MiniLM features')
+    parser.add_argument('--stability-repeats', type=int, choices=[1, 2, 3], default=None)
+    parser.add_argument('--trial-timeout', type=float, default=None)
+    parser.add_argument('--threads', type=int, default=None)
+    parser.add_argument('--search-patience', type=int, default=None)
+    parser.add_argument('--feature-search', action='store_true', default=None)
+    parser.add_argument('--nested-cv-folds', type=int, choices=[0,2,3], default=None)
+    parser.add_argument('--evaluation-prefix', default='released',
+                        help='Prefix for task evaluation IDs; use a new prefix for a fresh ledger')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     os.environ['SUPERAGENT_USAGE_ROOT'] = str(ROOT / '.model_usage')
-    policy = {'max_trials': args.max_trials, 'time_budget_seconds': args.time_budget, 'trial_timeout_seconds': args.trial_timeout,
-              'threads': 4, 'device': 'auto', 'compute_profile': 'auto', 'llm_mode': 'disabled',
-              'progressive_output': False, 'enable_minilm': args.enable_minilm,
-              'stability_repeats': args.stability_repeats, 'search_patience': args.search_patience,
-              'enable_feature_search':args.feature_search, 'nested_cv_folds':args.nested_cv_folds}
+    policy = {}
+    policy_path = args.policy.resolve()
+    if policy_path.exists():
+        policy = json.loads(policy_path.read_text(encoding='utf-8-sig'))
+    # Keep this helper development-only. The policy may set the search budget,
+    # but it can never turn the released benchmark into a formal frozen run.
+    policy.update(evaluation_stage='development', progressive_output=False)
+    for key, value in {
+        'max_trials': args.max_trials,
+        'time_budget_seconds': args.time_budget,
+        'trial_timeout_seconds': args.trial_timeout,
+        'threads': args.threads,
+        'enable_minilm': args.enable_minilm,
+        'stability_repeats': args.stability_repeats,
+        'search_patience': args.search_patience,
+        'enable_feature_search': args.feature_search,
+        'nested_cv_folds': args.nested_cv_folds,
+    }.items():
+        if value is not None:
+            policy[key] = value
+    policy.setdefault('device', 'auto')
+    policy.setdefault('compute_profile', 'auto')
     if args.llm_registry:
         if args.key_file:
             os.environ['HKUST_API_KEY'] = args.key_file.read_text(encoding='utf-8-sig').strip()
         policy.update(llm_mode='required', llm_registry=str(args.llm_registry.resolve()),
-                      llm_model_id=args.llm_model, llm_base_url='https://aigc-api.hkust-gz.edu.cn/api/v2',
-                      llm_max_output_tokens=args.llm_output_tokens, llm_timeout_seconds=180, llm_budget_rmb='20')
+                      llm_model_id=args.llm_model,
+                      llm_base_url=policy.get('llm_base_url', 'https://aigc-api.hkust-gz.edu.cn/api/v2'),
+                      llm_max_output_tokens=args.llm_output_tokens or policy.get('llm_max_output_tokens', 4096),
+                      llm_timeout_seconds=args.llm_timeout_seconds or policy.get('llm_timeout_seconds', 180),
+                      llm_budget_rmb='20')
+    elif args.llm_timeout_seconds is not None:
+        policy['llm_timeout_seconds'] = args.llm_timeout_seconds
     if args.provisional_accounting:
         policy.update(allow_provisional_accounting=True, max_cost_rmb='20')
     (output / 'policy.json').write_text(json.dumps(policy, indent=2), encoding='utf-8')
-    frozen = invoke(output, ROOT / 'main.py', 'freeze', '--policy', output / 'policy.json',
-                    '--output', output / 'frozen_agent')
-    entry = output / 'frozen_agent/main.py'
+    # Formal freezing is an explicit separate CLI action, never a side effect.
+    entry = ROOT / 'main.py'
     inputs = [
         ('coupon', ROOT / 'in_vehicle_coupon_recommendation', 'train.csv', 'val.csv', 'test.csv',
          {'data_type': 'tabular', 'target_column': 'label', 'id_column': 'id'}),
@@ -67,7 +95,7 @@ def main():
          {'data_type': 'text', 'target_column': 'label_pairwise', 'text_columns': ['headline_A', 'headline_B']}),
     ]
     results = {'purpose': 'Development comparison; reused test data is not independent final evaluation',
-               'runtime_sha256': frozen['runtime_sha256'], 'tasks': {}}
+               'runtime_sha256': runtime_fingerprint(), 'evaluation_stage': 'development', 'tasks': {}}
     for name, data, train, val, test, fields in inputs:
         if name not in args.tasks:
             continue
@@ -80,9 +108,9 @@ def main():
             data.mkdir()
             for split in ('train', 'val'):
                 convert_split(source, split, data / f'{split}.csv')
-        config = {**(policy if args.provisional_accounting else {}), **fields, 'train_csv': str(data / train), 'validation_csv': str(data / val),
-                  'metric': 'accuracy', 'evaluation_stage': 'development' if args.provisional_accounting else 'released',
-                  'evaluation_id': f'released-{name}', 'frozen_manifest': frozen['manifest']}
+        config = {**policy, **fields, 'train_csv': str(data / train), 'validation_csv': str(data / val),
+                  'metric': 'accuracy', 'evaluation_stage': 'development',
+                  'evaluation_id': f'{args.evaluation_prefix}-{name}'}
         path = folder / 'task.json'
         path.write_text(json.dumps(config, indent=2), encoding='utf-8')
         try:

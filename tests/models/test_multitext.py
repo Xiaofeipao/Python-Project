@@ -6,6 +6,14 @@ from superagent.preprocessing.transformers import MultiTextFeatures
 from superagent.models.tabular import EncodedXGBoost
 
 
+def expected_auto_device():
+    if importlib.util.find_spec('torch') is not None:
+        import torch
+        if torch.cuda.is_available():
+            return 'cuda'
+    return 'cpu'
+
+
 class MultiTextTests(unittest.TestCase):
     def test_calibrated_and_projected_text_models(self):
         import tempfile, joblib
@@ -77,39 +85,30 @@ class MultiTextTests(unittest.TestCase):
                 self.assertEqual(model.model_.get_params()['device'], 'cpu')
                 np.testing.assert_allclose(model.predict_proba(X).sum(axis=1), 1)
 
-    def test_xgboost_gpu_with_string_classes_and_cpu_inference(self):
-        if importlib.util.find_spec('torch') is None:
-            self.skipTest('torch is not installed (requirements-gpu.txt)')
-        import torch
-        if not torch.cuda.is_available():
-            self.skipTest('CUDA unavailable')
+    def test_xgboost_auto_with_string_classes_and_cpu_inference(self):
         X = np.arange(80).reshape(40, 2)
-        model = EncodedXGBoost(iterations=5, depth=3).fit(X, ['accept', 'decline'] * 20)
-        self.assertEqual(model.resource_report_['device'], 'cuda')
+        model = EncodedXGBoost(iterations=5, depth=3, device='auto').fit(X, ['accept', 'decline'] * 20)
+        self.assertEqual(model.resource_report_['device'], expected_auto_device())
         self.assertEqual(set(model.classes_), {'accept', 'decline'})
         self.assertEqual(model.model_.get_params()['device'], 'cpu')
         np.testing.assert_allclose(model.predict_proba(X).sum(axis=1), 1)
 
     def test_cross_boost_pipeline_roundtrip(self):
-        if importlib.util.find_spec('torch') is None:
-            self.skipTest('torch is not installed (requirements-gpu.txt)')
-        import torch, tempfile, joblib
+        import tempfile, joblib
         from pathlib import Path
         from superagent.planning.search_space import build_model
         from superagent.config import TaskConfig
-        if not torch.cuda.is_available():
-            self.skipTest('CUDA unavailable')
         X = pd.DataFrame({'kind': ['a', 'b', None] * 20})
         profile = {'data_type': 'tabular', 'features': ['kind'], 'numeric_columns': [],
                    'categorical_columns': ['kind']}
         model = build_model(profile, {'family': 'cross_boost_blend', 'iterations': 5,
                                      'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': .15},
-                            TaskConfig(train_csv='unused', target_column='label'))
+                            TaskConfig(train_csv='unused', target_column='label', device='auto'))
         model.fit(X, ['yes', 'no', 'yes'] * 20)
         query = pd.DataFrame({'kind': ['unknown', None]})
         expected = model.predict_proba(query)
         np.testing.assert_allclose(expected.sum(axis=1), 1)
-        self.assertEqual(model.named_steps['classifier'].resource_report_['device'], 'cuda')
+        self.assertEqual(model.named_steps['classifier'].resource_report_['device'], expected_auto_device())
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'cross.joblib'
             joblib.dump(model, path)

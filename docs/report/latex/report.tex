@@ -86,7 +86,7 @@ For call $i$, registered-rate cost is
 \begin{equation}
 K_i=\frac{r_{\mathrm{in}}n_{\mathrm{in},i}+r_{\mathrm{out}}n_{\mathrm{out},i}}{10^6}.
 \end{equation}
-The project uses fixed official off-peak accounting: Flash CNY 1/4 and Pro CNY 4.5/13.5 per million input/output tokens, with all inputs priced at cache miss. These are calculated token costs, not provider invoices. The accepted course interpretation of the pricing convention and the exact deployed revision must be confirmed. Original publisher evidence is stored in lossless Base64 archives; decoded bytes retain their registered SHA-256 values.
+The project uses the user-selected off-peak accounting convention: Flash CNY 1/4 and Pro CNY 4.5/13.5 per million input/output tokens, with all inputs priced at cache miss and no cache discount or free-credit offset. Earlier standard/peak development ledgers are retained as historical records and are not the final off-peak evidence. These are calculated token costs, not provider invoices. The exact deployed revision must be confirmed. Original publisher evidence is stored in lossless Base64 archives; decoded bytes retain their registered SHA-256 values.
 
 The complete current inventory enumerates fifteen ledger files and 133 calls, totaling CNY 1.319903. All included calls have recorded costs; missing-cost records and unresolved reservations are zero in that record set. The primary Coupon and Headlines runs cost CNY 0.069836 and CNY 0.027561, respectively, totaling CNY 0.097397. The cross-version development-frontier pair costs CNY 0.087233. Both pairs are subsets of the inventory and must not be added to its total again. Table~\ref{tab:ledgers} lists every current ledger.
 
@@ -147,7 +147,7 @@ OpenAI Codex assisted implementation, review, testing and documentation. Runtime
 \begin{thebibliography}{9}
 \bibitem{assignment} AIAA 3102 teaching team, ``Final Project: General Algorithm SuperAgent---Full Assignment Requirements,'' course-provided specification, local repository.
 \bibitem{rubric} AIAA 3102 teaching team, ``Final Project Grading Rubric (40 Points),'' course-provided rubric, local repository.
-\bibitem{evidence} Project model registries, fixed official off-peak rates and lossless publisher evidence archives, configs/model\_registry*.json and configs/evidence/, accessed as local audit artifacts, Nov. 24, 2026.
+\bibitem{evidence} Project model registries, user-selected official off-peak rates and lossless publisher evidence archives, configs/model\_registry*.json and configs/evidence/, accessed as local audit artifacts, Nov. 25, 2026.
 \bibitem{artifacts} Project execution artifacts, source fingerprints, trials, evaluations and token ledgers, current inventory snapshot, Nov. 24, 2026.
 \end{thebibliography}
 \end{document}

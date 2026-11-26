@@ -4,9 +4,53 @@ from contextlib import nullcontext
 
 import numpy as np
 from scipy import sparse
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin
 from sklearn.model_selection import train_test_split
 from sklearn.utils.validation import check_is_fitted
+
+
+class FrozenImageFeatures(TransformerMixin, BaseEstimator):
+    """Stream image batches through an explicitly versioned, frozen backbone."""
+    def __init__(self, column, root='.', size=96, device='auto', batch_size=32,
+                 threads=1, random_state=42, pretrained=True):
+        self.column, self.root, self.size = column, root, size
+        self.device, self.batch_size = device, batch_size
+        self.threads, self.random_state, self.pretrained = threads, random_state, pretrained
+
+    def fit(self, X, y=None):
+        import torch
+        from superagent.preprocessing.transformers import ImageFeatures
+        torch.set_num_threads(self.threads)
+        # Isolate initialization from any other estimator's random stream.
+        with torch.random.fork_rng(devices=[]):
+            torch.manual_seed(self.random_state)
+            self.probe_ = TorchClassifier(architecture='pretrained_resnet18', image_size=self.size,
+                device=self.device, pretrained=self.pretrained, imagenet_normalize=True)
+            self.probe_.classes_ = np.array([0, 1])
+            encoder = self.probe_._network(load_weights=self.pretrained)
+        encoder.fc = torch.nn.Identity()
+        self.backbone_state_ = {k: v.detach().cpu().numpy().copy() for k, v in encoder.state_dict().items()}
+        self.images_ = ImageFeatures(self.column, self.root, self.size)
+        self.resource_report_ = {'backend': 'frozen_resnet18', 'frozen': True,
+            'device': self.probe_._device(), 'output_features': 512,
+            'pretrained_weights': getattr(self.probe_, 'pretrained_weights_', None)}
+        return self
+
+    def transform(self, X):
+        import torch
+        check_is_fitted(self, ['backbone_state_', 'images_'])
+        device = self.probe_._device()
+        encoder = self.probe_._network(load_weights=False)
+        encoder.fc = torch.nn.Identity()
+        encoder.load_state_dict({k: torch.from_numpy(v) for k, v in self.backbone_state_.items()})
+        encoder.to(device).eval()
+        batches = []
+        with torch.inference_mode():
+            for start in range(0, len(X), self.batch_size):
+                pixels = self.images_.transform(X.iloc[start:start+self.batch_size])
+                batch = self.probe_._batch(pixels, slice(None), device)
+                batches.append(encoder(batch).cpu().numpy())
+        return np.concatenate(batches) if batches else np.empty((0, 512), dtype=np.float32)
 
 
 class TorchClassifier(ClassifierMixin, BaseEstimator):
@@ -15,7 +59,8 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
                  random_state=42, threads=1, depth=3, width=32, dropout=0.1,
                  mixed_precision=False, gpu_cache_fraction=0.2, early_stopping=False,
                  patience=12, label_smoothing=0.0, augment=False, cosine_schedule=False,
-                 refit_epochs=None, normalize_images=False):
+                 refit_epochs=None, normalize_images=False, imagenet_normalize=False,
+                 pretrained=True, tta=False):
         self.architecture = architecture
         self.hidden = hidden
         self.epochs = epochs
@@ -38,6 +83,9 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
         self.cosine_schedule = cosine_schedule
         self.refit_epochs = refit_epochs
         self.normalize_images = normalize_images
+        self.imagenet_normalize = imagenet_normalize
+        self.pretrained = pretrained
+        self.tta = tta
 
     def __setstate__(self, state):
         # Earlier checkpoints lack the new parameters; preserve legacy defaults.
@@ -51,8 +99,38 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
             raise RuntimeError("CUDA explicitly requested but unavailable")
         return "cuda" if self.device != "cpu" and torch.cuda.is_available() else "cpu"
 
-    def _network(self):
+    def _is_image(self):
+        return self.architecture in {"cnn", "resnet", "pretrained_resnet18", "pretrained_resnet34"}
+
+    def _network(self, load_weights=False):
         from torch import nn
+
+        if self.architecture.startswith("pretrained_resnet"):
+            from torchvision import models
+
+            constructor = getattr(models, self.architecture.replace("pretrained_", ""))
+            weights = (models.ResNet18_Weights.IMAGENET1K_V1 if self.architecture == 'pretrained_resnet18'
+                       else models.ResNet34_Weights.IMAGENET1K_V1) if (load_weights and self.pretrained) else None
+            if weights is not None:
+                import hashlib
+                from pathlib import Path
+                from urllib.parse import urlparse
+                import torch
+                # Verify the publisher hash prefix even on the initial download.
+                state = weights.get_state_dict(progress=True, check_hash=True)
+                checkpoint = Path(torch.hub.get_dir()) / 'checkpoints' / Path(urlparse(weights.url).path).name
+                digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+                expected = checkpoint.stem.rsplit('-', 1)[-1]
+                if not digest.startswith(expected):
+                    raise ValueError('Pretrained weight hash differs from the publisher filename')
+                network = constructor(weights=None)
+                network.load_state_dict(state)
+                self.pretrained_weights_ = {'name': str(weights), 'url': weights.url,
+                                            'sha256': digest, 'publisher_hash_prefix': expected}
+            else:
+                network = constructor(weights=None)
+            network.fc = nn.Linear(network.fc.in_features, len(self.classes_))
+            return network
 
         class ResidualConv(nn.Module):
             def __init__(self, incoming, outgoing, stride=1):
@@ -115,10 +193,14 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
         if sparse.issparse(batch):
             batch = batch.toarray()
         batch = np.asarray(batch, dtype=np.float32)
-        if self.architecture in {"cnn", "resnet"}:
+        if self._is_image():
             batch = batch[:, :self.image_size * self.image_size * 3]
             batch = batch.reshape(-1, self.image_size, self.image_size, 3).transpose(0, 3, 1, 2)
-            if self.normalize_images:
+            if self.imagenet_normalize:
+                mean = np.asarray([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 3, 1, 1)
+                deviation = np.asarray([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 3, 1, 1)
+                batch = (batch - mean) / deviation
+            elif self.normalize_images:
                 batch = (batch - 0.5) * 2
         return torch.from_numpy(np.ascontiguousarray(batch)).to(device)
 
@@ -154,7 +236,16 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
             training, monitor = train_test_split(training, test_size=max(0.15, len(self.classes_) / len(encoded)),
                                                   stratify=encoded, random_state=self.random_state)
         maximum_epochs = int(self.refit_epochs or self.epochs)
-        model = self._network().to(device)
+        self.pretrained_fallback_reason_ = None
+        self.pretrained_weights_ = None
+        try:
+            model = self._network(load_weights=True).to(device)
+        except Exception as exc:
+            if not self.architecture.startswith("pretrained_resnet"):
+                raise
+            # Offline deployments must still produce a runnable image model.
+            self.pretrained_fallback_reason_ = f"{type(exc).__name__}: {exc}"
+            model = self._network(load_weights=False).to(device)
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.learning_rate, weight_decay=self.weight_decay)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=self.epochs) if self.cosine_schedule else None
         criterion = nn.CrossEntropyLoss(label_smoothing=self.label_smoothing)
@@ -182,7 +273,9 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
             for start in range(0, len(order), self.batch_size):
                 indices = order[start:start + self.batch_size]
                 batch = features(indices)
-                if self.augment and self.architecture in {"cnn", "resnet"}:
+                if self.augment and self._is_image():
+                    if generator.random() < 0.5:
+                        batch = torch.flip(batch, dims=[3])
                     shift = max(1, self.image_size // 16)
                     dy, dx = generator.integers(-shift, shift + 1, size=2).tolist()
                     padded = nn.functional.pad(batch, (shift, shift, shift, shift))
@@ -236,6 +329,9 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
             "parameter_count": sum(p.numel() for p in model.parameters()),
             "gpu_name": torch.cuda.get_device_name() if device == "cuda" else None,
             "peak_cuda_allocated_bytes": torch.cuda.max_memory_allocated() if device == "cuda" else 0,
+            "pretrained_backbone": self.architecture.startswith("pretrained_resnet"),
+            "pretrained_weight_fallback": self.pretrained_fallback_reason_,
+            "pretrained_weights": self.pretrained_weights_,
         }
         return self
 
@@ -246,13 +342,16 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
         if X.shape[1] != self.n_features_in_:
             raise ValueError("Prediction feature count differs from fitted schema")
         device = self._device()
-        model = self._network().to(device)
+        model = self._network(load_weights=False).to(device)
         model.load_state_dict({key: torch.from_numpy(value).to(device) for key, value in self.weights_.items()})
         model.eval()
         batches = []
         with torch.inference_mode():
             for start in range(0, X.shape[0], self.batch_size):
-                logits = model(self._batch(X, slice(start, start + self.batch_size), device))
+                batch = self._batch(X, slice(start, start + self.batch_size), device)
+                logits = model(batch)
+                if self.tta and self._is_image():
+                    logits = (logits + model(torch.flip(batch, dims=[3]))) / 2
                 batches.append(torch.softmax(logits.float(), dim=1).cpu().numpy())
         return np.concatenate(batches, axis=0)
 

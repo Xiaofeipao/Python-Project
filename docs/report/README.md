@@ -1,5 +1,10 @@
 # Report Manuscript
 
+This manuscript describes its recorded historical experiments. The current
+checkout is unfrozen and has since changed. The source, features, planner guards
+and refit fallback now present must not be attributed to those older results.
+See ../guides/requirements_status.md for the evidence needed before submission.
+
 - report.pdf: the only published report PDF.
 - latex/report.tex: editable English manuscript.
 - latex/IEEEtran.cls: document class with its original license header.

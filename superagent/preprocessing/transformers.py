@@ -10,10 +10,29 @@ from PIL import Image, ImageOps
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import TruncatedSVD
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer as SklearnTfidfVectorizer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline, FeatureUnion
 from sklearn.preprocessing import OneHotEncoder, OrdinalEncoder, StandardScaler
+
+
+class TfidfVectorizer(SklearnTfidfVectorizer):
+    """Keep a zero-valued training vocabulary when text has no usable tokens."""
+    def fit(self, raw_documents, y=None):
+        self.fit_transform(raw_documents, y)
+        return self
+
+    def fit_transform(self, raw_documents, y=None):
+        documents = list(raw_documents)
+        try:
+            return super().fit_transform(documents, y)
+        except ValueError as exc:
+            if not any(reason in str(exc) for reason in ('empty vocabulary', 'After pruning', 'max_df corresponds')):
+                raise
+            self.vocabulary = {'__empty_training_vocabulary__': 0}
+            self.min_df, self.max_df = 1, 1.0
+            self.empty_vocabulary_fallback_ = True
+            return super().fit_transform(documents, y)
 
 
 def checked_vectorizer_options(options):
@@ -63,9 +82,15 @@ class BoundedSVD(BaseEstimator, TransformerMixin):
 
 
 class FrameSchema(BaseEstimator, TransformerMixin):
-    def __init__(self, columns, numeric):
+    def __init__(self, columns, numeric, datetime=()):
         self.columns = columns
         self.numeric = numeric
+        self.datetime = datetime
+
+    def __setstate__(self, state):
+        # Models persisted before datetime-aware schemas have no attribute.
+        state.setdefault("datetime", ())
+        super().__setstate__(state)
 
     def fit(self, X, y=None):
         self.transform(X)
@@ -77,12 +102,66 @@ class FrameSchema(BaseEstimator, TransformerMixin):
         if missing:
             raise ValueError(f"Missing prediction features: {sorted(missing)}")
         result = X[self.columns].copy()
+        datetimes = set(self.datetime)
         for column in self.columns:
-            if column in self.numeric:
+            if column in datetimes:
+                result[column] = pd.to_datetime(result[column], errors="coerce", format="mixed")
+            elif column in self.numeric:
                 result[column] = pd.to_numeric(result[column], errors="coerce").replace([np.inf, -np.inf], np.nan)
             else:
                 result[column] = result[column].map(lambda v: np.nan if pd.isna(v) else str(v))
         return result
+
+
+class DatetimeFeatures(BaseEstimator, TransformerMixin):
+    """Calendar components fitted with a train-only reference timestamp."""
+
+    def __init__(self, columns):
+        self.columns = columns
+
+    def _parsed(self, X):
+        return {column: pd.to_datetime(X[column], errors="coerce", format="mixed")
+                for column in self.columns}
+
+    def fit(self, X, y=None):
+        parsed = self._parsed(X)
+        finite = [series.dropna() for series in parsed.values() if series.notna().any()]
+        self.reference_ = min((series.min() for series in finite), default=pd.Timestamp("1970-01-01"))
+        return self
+
+    def transform(self, X):
+        parsed = self._parsed(X)
+        blocks = []
+        for column in self.columns:
+            series = parsed[column]
+            blocks.append(np.column_stack([
+                series.dt.year, series.dt.month, series.dt.day, series.dt.weekday,
+                series.dt.hour,
+                (series - self.reference_).dt.total_seconds() / 86400.0,
+                series.dt.weekday >= 5,
+            ]).astype(np.float32))
+        return np.hstack(blocks)
+
+
+class FrequencyEncoder(BaseEstimator, TransformerMixin):
+    """High-cardinality fallback: smoothed frequency, unknown levels map to zero."""
+
+    def __init__(self, columns):
+        self.columns = columns
+
+    def fit(self, X, y=None):
+        self.maps_ = {}
+        for column in self.columns:
+            values = X[column].fillna("__missing__").astype(str)
+            self.maps_[column] = values.value_counts(normalize=True).to_dict()
+        return self
+
+    def transform(self, X):
+        values = []
+        for column in self.columns:
+            series = X[column].fillna("__missing__").astype(str)
+            values.append(series.map(self.maps_[column]).fillna(0.0).to_numpy(dtype=np.float32))
+        return np.column_stack(values)
 
 
 class JoinText(BaseEstimator, TransformerMixin):
@@ -254,27 +333,88 @@ def preprocessor(profile, candidate, image_root):
             ).set_params(**checked_vectorizer_options(candidate.get('vectorizer_options')))),
         ])
     if modality == "image":
-        if candidate["family"] in {"torch_cnn", "torch_resnet", "torch_ensemble"}:
+        if candidate["family"] in {"torch_cnn", "torch_resnet", "torch_ensemble", "torch_pretrained"}:
             return Pipeline([("images", ImageFeatures(profile["image_column"], image_root,
                                                        candidate.get("size", 32)))])
         return Pipeline([
             ("images", ImageFeatures(profile["image_column"], image_root, candidate.get("size", 24))),
             ("scale", StandardScaler()),
         ])
-    numeric = profile["numeric_columns"]
-    categorical = profile["categorical_columns"]
+    return tabular_preprocessor(profile, candidate)
+
+
+def tabular_preprocessor(profile, candidate, columns=None, numeric=None,
+                         categorical=None, datetimes=None):
+    columns = list(columns if columns is not None else profile["features"])
+    numeric = list(numeric if numeric is not None else profile["numeric_columns"])
+    categorical = list(categorical if categorical is not None else profile["categorical_columns"])
+    datetimes = list(datetimes if datetimes is not None else profile.get("datetime_columns", []))
+    cardinality = profile.get("categorical_cardinality", {})
+    # Keep the established one-hot/ordinal path as the default. Frequency
+    # encoding remains available as an explicit high-cardinality fallback,
+    # but it must not silently replace the representation that produced the
+    # verified tabular results.
+    high = [c for c in categorical if cardinality.get(c, 0) > 128]
+    frequency_mode = candidate.get('encoding') == 'frequency'
+    frequency = high if frequency_mode else []
+    low = [c for c in categorical if c not in frequency]
     transforms = []
     if numeric:
         transforms.append(("numeric", Pipeline([
-            ("impute", SimpleImputer(strategy=candidate.get('imputer','median'), keep_empty_features=True)),
+            ("impute", SimpleImputer(strategy=candidate.get('imputer', 'median'), keep_empty_features=True)),
             ("scale", StandardScaler()),
         ]), numeric))
-    if categorical:
+    if datetimes:
+        transforms.append(("datetime", Pipeline([
+            ("parts", DatetimeFeatures(datetimes)),
+            ("impute", SimpleImputer(strategy='median', keep_empty_features=True)),
+            ("scale", StandardScaler()),
+        ]), datetimes))
+    if low:
+        ordinal = candidate.get('encoding') == 'ordinal'
         transforms.append(("category", Pipeline([
             ("impute", SimpleImputer(strategy="constant", fill_value="__missing__", keep_empty_features=True)),
-            ("encode", OrdinalEncoder(handle_unknown='use_encoded_value',unknown_value=-1) if candidate.get('encoding')=='ordinal' else OneHotEncoder(handle_unknown="ignore", min_frequency=2, max_categories=128)),
-        ]), categorical))
+            ("encode", OrdinalEncoder(handle_unknown='use_encoded_value', unknown_value=-1) if ordinal
+             else OneHotEncoder(handle_unknown="ignore", min_frequency=2, max_categories=128)),
+        ]), low))
+    if frequency:
+        transforms.append(("frequency", Pipeline([
+            ("frequency", FrequencyEncoder(frequency)),
+            ("impute", SimpleImputer(strategy='median', keep_empty_features=True)),
+            ("scale", StandardScaler()),
+        ]), high))
     return Pipeline([
-        ("schema", FrameSchema(profile["features"], numeric)),
+        ("schema", FrameSchema(columns, numeric, datetimes)),
         ("columns", ColumnTransformer(transforms, sparse_threshold=1.0)),
     ])
+
+
+def text_vectorizer(candidate):
+    """Text vectorizer shared by hybrid models; capacity is candidate-controlled."""
+    analyzer = candidate.get('analyzer', 'word')
+    max_features = int(candidate.get('text_max_features', 20000))
+    if analyzer == 'combined':
+        return FeatureUnion([
+            ('word', TfidfVectorizer(ngram_range=(1, 2), min_df=2, max_features=max_features,
+                                     token_pattern=r"(?u)\b\w+\b", sublinear_tf=True, dtype=np.float32)),
+            ('char', TfidfVectorizer(analyzer='char', ngram_range=(2, 5), min_df=2,
+                                     max_features=max_features, sublinear_tf=True, dtype=np.float32)),
+        ])
+    character = analyzer in {'char', 'char_wb'}
+    return TfidfVectorizer(analyzer=analyzer if character else 'word',
+                           ngram_range=(2, 5) if character else (1, 2), min_df=2,
+                           token_pattern=None if character else r"(?u)\b\w+\b",
+                           max_features=max_features, sublinear_tf=True, dtype=np.float32)
+
+
+def hybrid_preprocessor(profile, candidate):
+    """Text TF-IDF and tabular features share one estimator without dropping columns."""
+    text_columns = profile.get("text_columns") or []
+    tabular_columns = profile.get("tabular_columns") or []
+    if not text_columns:
+        raise ValueError("Hybrid models require at least one text column")
+    text = Pipeline([("join", JoinText(text_columns)), ("tfidf", text_vectorizer(candidate))])
+    if not tabular_columns:
+        return Pipeline([("text", text)])
+    tabular = tabular_preprocessor(dict(profile, features=tabular_columns), candidate)
+    return FeatureUnion([("text", text), ("tabular", tabular)])

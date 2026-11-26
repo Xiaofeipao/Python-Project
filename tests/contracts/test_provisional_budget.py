@@ -10,10 +10,10 @@ class ProvisionalBudgetTests(unittest.TestCase):
                  'input_rmb_per_million':'1','output_rmb_per_million':'4'}
         with tempfile.TemporaryDirectory() as folder:
             ledger=UsageLedger(folder,'test','20')
-            for _ in range(4):
+            for _ in range(19):
                 c=ledger.reserve(model,64,'planner','run','request',allow_reserved_unknown=True)
                 ledger.finish(c['call_id'],model,error='TimeoutError')
-            self.assertEqual(ledger.summary()['unreconciled_reserved_rmb'],'20')
+            self.assertEqual(ledger.summary()['unreconciled_reserved_rmb'],'19.004864')
             self.assertIsNone(ledger.summary()['actual_total_cost_rmb'])
             with self.assertRaises(BudgetExhausted):
                 ledger.reserve(model,64,'planner','run','request',allow_reserved_unknown=True)

@@ -21,11 +21,11 @@ class TaskConfig:
     feature_columns: list[str] | None = None
     text_columns: list[str] | None = None
     image_column: str | None = None
-    image_root: str = "."
+    image_root: str | None = None
     metric: str = "f1_macro"
     positive_label: str | None = None
     validation_fraction: float = 0.2
-    max_trials: int = 10
+    max_trials: int = 24
     time_budget_seconds: float = 1800
     trial_timeout_seconds: float = 300
     final_fit_reserve_fraction: float = 0.3
@@ -50,10 +50,9 @@ class TaskConfig:
     llm_agent_id: str = "planner"
     llm_max_output_tokens: int = 4096
     # A non-streaming 4096-token reply (including reasoning tokens) can take
-    # well over 60 s on the school deployment: measured 46.8 s for 1679 tokens
-    # and a hard timeout at 60 s for longer replies. 180 s keeps the whole
-    # reply inside one read window without retries.
-    llm_timeout_seconds: float = 180
+    # well over 60 s on the school deployment. 300 s avoids the observed
+    # 180 s read timeout without silently retrying an ambiguous request.
+    llm_timeout_seconds: float = 300
     llm_budget_rmb: str = "20"
     progressive_output: bool = False
     max_cost_rmb: str = '15'
@@ -65,6 +64,12 @@ class TaskConfig:
     nested_cv_max_rows: int = 600
     enable_feature_search: bool = False
 
+    def __post_init__(self):
+        # Direct TaskConfig construction also gets the data directory rather
+        # than the process working directory; explicit image_root still wins.
+        if self.image_root is None:
+            self.image_root = str(Path(self.train_csv).parent)
+
     @classmethod
     def load(cls, path):
         path = Path(path).resolve()
@@ -75,12 +80,17 @@ class TaskConfig:
         from superagent.governance.frozen_bundle import frozen_policy
 
         raw = frozen_policy(raw, path)
+        image_root_explicit = 'image_root' in raw
         config = cls(**raw)
         config.validate()
         for name in ("train_csv", "validation_csv", "test_csv", "image_root", "frozen_manifest", "llm_registry"):
             value = getattr(config, name)
             if value is not None:
                 setattr(config, name, str((path.parent / value).resolve()))
+        if not image_root_explicit:
+            # Image paths in a hidden CSV are normally relative to the data
+            # directory, not to wherever the task configuration happens to live.
+            config.image_root = str(Path(config.train_csv).parent)
         paths = [config.train_csv, config.validation_csv, config.test_csv]
         paths = [str(Path(p).resolve()).casefold() for p in paths if p]
         if len(paths) != len(set(paths)):
@@ -120,8 +130,8 @@ class TaskConfig:
         self.llm_budget_rmb = str(amount(self.llm_budget_rmb))
         if not isinstance(self.llm_api_key_env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.llm_api_key_env):
             raise ValueError("llm_api_key_env must name an environment variable, not contain an API key")
-        if not isinstance(self.llm_agent_id, str) or not self.llm_agent_id:
-            raise ValueError("llm_agent_id must be a nonempty audit identifier")
+        if self.llm_agent_id != 'planner':
+            raise ValueError("This single-agent runtime uses llm_agent_id='planner' only")
         if self.llm_mode == "required" and not all((self.llm_registry, self.llm_model_id, self.llm_base_url)):
             raise ValueError("LLM planning needs llm_registry, llm_model_id and llm_base_url")
         if self.compute_profile not in {"auto", "standard", "gpu_large"}:

@@ -9,7 +9,7 @@ The expected local input folders are in_vehicle_coupon_recommendation/ and Relea
 ```powershell
 $credentialPath = Read-Host 'Local API credential file path'
 $runStamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-python scripts/workflows/run_released_batch.py --output "runs/flash_$runStamp" --max-trials 10 --llm-registry configs/model_registry.flash.json --llm-model DeepSeek-V4.1-Flash --key-file $credentialPath --llm-output-tokens 4096 --provisional-accounting
+python scripts/workflows/run_released_batch.py --output "runs/flash_$runStamp" --max-trials 24 --llm-registry configs/model_registry.flash.json --llm-model DeepSeek-V4.1-Flash --key-file $credentialPath --llm-output-tokens 4096 --provisional-accounting
 ```
 
 This performs new training and automatic selection for both tasks, using GPU where supported and available, with CPU fallback. It writes a new run directory and does not overwrite existing best models. Batch console output can remain quiet while subprocess logs are captured; the final task summary is printed after completion.

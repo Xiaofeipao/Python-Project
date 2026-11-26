@@ -140,7 +140,7 @@ class AutonomousPlanner:
     def export_usage(self):
         summary = self.ledger.summary()
         summary.update(llm_mode=self.config.llm_mode, run_id=self.run_id,
-                       pricing_rule="2026-10-21 official input/output standard CNY prices; no cache discounts or free credits")
+                       pricing_rule="2026-10-21 official off-peak input/output CNY prices; all input at cache-miss rate; no cache discounts or free credits")
         write_json(self.output / "model_usage.json", summary)
         write_json(self.output / "task_model_calls.json", self.ledger.audit_records())
         # A task-wide snapshot includes calls from earlier attempts, not only this run.
@@ -155,21 +155,35 @@ class AutonomousPlanner:
             return next_candidate(profile, history, metric)
         menu = candidate_menu(profile, history, metric)
         fallback, reason = (menu[0]['candidate'], menu[0]['reason']) if menu else (None, 'Eligible search space exhausted')
+        # Establish the generic anchor before spending API budget on exploration.
+        # This is modality/shape-level only and contains no task or dataset identity.
+        if len(history) == 1:
+            if profile.get('data_type') == 'text' and len(profile.get('text_columns') or []) == 2:
+                anchor = {'family': 'pairwise_overlap', 'C': 1., 'fit_intercept': True,
+                          'vectorizer_options': {'ngram_range': [3, 6]}}
+                event(self.output, 'deterministic_anchor', candidate=anchor,
+                      reason='Signed pairwise overlap anchor for two-text-column tasks')
+                return anchor, 'Signed pairwise overlap anchor for two-text-column tasks'
+            if fallback is not None:
+                event(self.output, 'deterministic_anchor', candidate=fallback, reason=reason)
+                return fallback, reason
         memory = state(history, metric)
         write_json(Path(self.output) / 'planner_checkpoint.json', {**memory, 'recent_history': history[-5:],
                    'last_rejection': getattr(self, '_last_rejection', None),
                    'restored_reflections':getattr(self,'_restored_reflections',[]),
+                   'repair_used': getattr(self, '_repair_used', False),
                    'consecutive_invalid_plans': getattr(self, '_invalid_plans', 0)})
         if getattr(self,'_resume_skip_api_once',False):
             self._resume_skip_api_once=False
             event(self.output,'llm_skipped',reason='First restored decision uses local planning; never replay an interrupted API request')
             return fallback,reason
-        if getattr(self, '_invalid_plans', 0) >= 2:
-            event(self.output, 'llm_skipped', reason='Two consecutive invalid plans; abandon API planning for this run')
+        repair = getattr(self, '_invalid_plans', 0) >= 2
+        if repair and getattr(self, '_repair_used', False):
+            event(self.output, 'llm_skipped', reason='Controlled repair exhausted; use local planning')
             return fallback, reason
         if self.model is None or not history or fallback is None:
             return fallback, reason
-        reserve = worst_case_cost(self.model)
+        reserve = worst_case_cost(self.model, self.config.llm_max_output_tokens)
         account = self.ledger.summary()
         if amount(account['actual_recorded_cost_rmb']) + amount(account['unreconciled_reserved_rmb']) + reserve > amount(self.config.max_cost_rmb):
             event(self.output, 'llm_skipped', reason='Worst-case total with prior unknown reservations exceeds cost ceiling; use local planner')
@@ -185,6 +199,9 @@ class AutonomousPlanner:
             {'choice': 0, 'proposal': {}, 'diagnosis': 'Prior family failed twice', 'next_action': 'Switch to another listed family'},
             {'choice': 0, 'proposal': {'C': .1}, 'hypothesis': 'Stronger regularization reduces variance', 'success_criterion': 'Improve mean validation score without increasing seed standard deviation', 'diagnosis': 'Recent mean scores plateaued', 'next_action': 'Change only C if this seed permits C'}]
         context['parameter_proposal_rules'] = {item['candidate']['family']:RULES[item['candidate']['family']] for item in menu if item['candidate']['family'] in RULES}
+        if repair:
+            context = {'menu': context['menu'], 'last_rejected_proposal': self._last_rejection,
+                       'instruction': 'Choose a listed seed with empty proposal. Return choice, proposal={}, diagnosis and next_action only.'}
         body = {
             "model": self.model["model_id"], "stream": False,
             "max_tokens": self.config.llm_max_output_tokens,
@@ -227,6 +244,9 @@ class AutonomousPlanner:
             self.export_usage()
             return fallback, reason
         recorded = False
+        if repair:
+            self._repair_used = True
+            event(self.output, 'llm_repair_started', call_id=call['call_id'], reason=self._last_rejection)
         try:
             write_json(request_path, {"call_id": call["call_id"], "body": body})
             with build_opener(NoRedirects()).open(request, timeout=min(self.config.llm_timeout_seconds, remaining)) as response:

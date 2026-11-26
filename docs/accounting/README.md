@@ -15,7 +15,7 @@ This directory explains the complete set of ledger files currently present in th
 
 All currently present records are included in the inventory. Missing token usage, if encountered in a future snapshot, must remain unknown rather than zero. Accounting completeness describes those included records. Keep the inventory scope and underlying evaluation IDs visible when interpreting totals.
 
-The course budget applies per announced evaluation task. Run-specific IDs and a catalog subtotal are not themselves proof of a complete formal task-budget review. Fixed off-peak token costs are distinct from provider invoices, and model deployment eligibility remains a separate question.
+The course budget applies per announced evaluation task. Run-specific IDs and a catalog subtotal are not themselves proof of a complete formal task-budget review. The final run uses user-selected off-peak token costs (Flash 1/4, Pro 4.5/13.5 CNY per million), distinct from provider invoices; earlier standard/peak ledgers are retained as historical records and must not be presented as the final off-peak ledger. Model deployment eligibility remains a separate question.
 
 ## File lifecycle
 

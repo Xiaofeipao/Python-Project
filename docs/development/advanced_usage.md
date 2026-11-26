@@ -26,7 +26,7 @@ search_patience defaults to 0 (off). Once at least eight trials have completed, 
 
 ## Test isolation
 
-Formal policies disable progressive_output. Search reads training and validation; final test inference follows selection/refitting. Explicit development progressive output may predict features after checkpoint selection and must be labeled separately. Python audit hooks guard configured test_csv access in the training interpreter; this is not a cross-process native-code sandbox. Batch test arrays are converted after training ends.
+Formal policies disable progressive_output. Search reads training and validation only. Even when progressive_output is enabled, checkpoints never predict test inputs. Python audit hooks guard configured test_csv access in the controller and each fitting worker until final selection; these hooks are not an OS sandbox against arbitrary native code or aliases. Batch test arrays are converted after training ends. Final refits reserve time for later candidates. If refitting fails, a verified train-only trial checkpoint may become the final partial solution, selected by validation and explicitly marked partial.
 
 ## Recovery
 

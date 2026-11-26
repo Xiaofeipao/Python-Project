@@ -24,9 +24,16 @@ from superagent.governance.frozen_bundle import program_files, stage_record
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
+def _minilm_available(config, profile, env):
+    """Optional encoder: explicit opt-in, or automatic for any text task."""
+    auto = profile.get('data_type') == 'text'
+    return bool((config.enable_minilm or auto)
+                and env.get('packages', {}).get('sentence-transformers'))
+
+
 def environment():
     versions = {}
-    for name in ("numpy", "pandas", "scikit-learn", "scipy", "joblib", "Pillow", "catboost", "lightgbm", "xgboost", "sentence-transformers", "transformers", "huggingface-hub", "tokenizers", "safetensors"):
+    for name in ("numpy", "pandas", "scikit-learn", "scipy", "joblib", "Pillow", "catboost", "lightgbm", "xgboost", "torchvision", "sentence-transformers", "transformers", "huggingface-hub", "tokenizers", "safetensors"):
         try:
             versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
@@ -65,6 +72,9 @@ def run_worker(request, folder, timeout, threads):
     request_path = folder / "request.json"
     write_json(request_path, request)
     env = os.environ.copy()
+    # Workers execute fits only. The one planner in this controller owns calls.
+    env.pop(request['config'].get('llm_api_key_env', 'HKUST_API_KEY'), None)
+    env.pop('HKUST_API_KEY', None)
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
         env[name] = str(threads)
     env["PYTHONHASHSEED"] = str(request["config"]["seed"])
@@ -98,16 +108,18 @@ def run_worker(request, folder, timeout, threads):
 
 def train_agent(config, output, resume_from=None):
     from contextlib import ExitStack
+    from dataclasses import replace
     from superagent.runtime.checkpoint import run_lock
     with ExitStack() as locks:
         if resume_from:
             locks.enter_context(run_lock(resume_from))
         locks.enter_context(run_lock(output))
-        return _train_agent(config,output,resume_from)
+        return _train_agent(replace(config),output,resume_from)
 
 
 def _train_agent(config, output, resume_from=None):
     from superagent.runtime.checkpoint import load_resume
+    requested_config = config.to_dict()
     resumed = load_resume(resume_from, config) if resume_from else None
     wall_started_at = datetime.now(timezone.utc).isoformat()
     started = time.monotonic()
@@ -125,7 +137,7 @@ def _train_agent(config, output, resume_from=None):
                "test_set_used_for_selection": False, "partial": True}
     event(output, "run_started", config=config.to_dict())
     from superagent.governance.test_access import install_test_guard
-    test_access = install_test_guard(config.test_csv if not config.progressive_output else None)
+    test_access = install_test_guard(config.test_csv)
     try:
         config.validate()
         submission = stage_record(config)
@@ -141,10 +153,30 @@ def _train_agent(config, output, resume_from=None):
             raise ValueError("Runtime snapshot does not match the frozen submission")
         env = environment()
         write_json(output / "environment.json", env)
+        (output / 'requirements.snapshot.txt').write_text(''.join(
+            f'{name}=={version}\n' for name, version in sorted(env['installed_distributions'].items())), encoding='utf-8')
         train, validation, profile, split, hashes = inspect_data(config)
+        profile['metric'] = config.metric
+        profile['fitting_class_counts'] = {str(k): int(v) for k, v in train[config.target_column].value_counts().items()}
         from superagent.evaluation.split_overlap import split_risk
         profile['split_risk']=split_risk(train,validation,profile)
         write_json(output / 'split_risk.json',profile['split_risk'])
+        # A small official validation split is noisy across 24 trials. Use two
+        # deterministic training seeds, and a small nested diagnostic when the
+        # training set itself is tiny; both use only training rows and never
+        # touch the designated test set.
+        validation_rows = len(validation)
+        if validation_rows < 300 and config.stability_repeats == 1:
+            config.stability_repeats = 2
+            event(output, 'stability_auto_enabled', validation_rows=validation_rows,
+                  stability_repeats=2)
+        if (validation_rows < 100 and len(train) <= config.nested_cv_max_rows
+                and config.nested_cv_folds == 0
+                and config.evaluation_stage in {'released', 'unseen'}):
+            config.nested_cv_folds = 2
+            event(output, 'nested_cv_auto_enabled', validation_rows=validation_rows,
+                  training_rows=len(train), folds=2)
+
         if profile['data_type']=='image':
             hashes['images']=image_hashes([train,validation],profile['image_column'],config.image_root)
         if resumed and hashes != resumed['manifest']['data_sha256']:
@@ -163,11 +195,15 @@ def _train_agent(config, output, resume_from=None):
         if resumed:
             planner._invalid_plans = resumed['planner'].get('consecutive_invalid_plans', 0)
             planner._last_rejection = resumed['planner'].get('last_rejection')
+            planner._repair_used = resumed['planner'].get('repair_used', False)
             planner._restored_reflections = resumed['reflections']
             planner._resume_skip_api_once = config.llm_mode=='required'
             event(output, 'resume_verified', parent=str(resumed['folder']), restored_trials=len(history), elapsed_including_downtime=resumed['elapsed'],restored_invalid_plans=planner._invalid_plans)
         profile["torch_available"] = config.enable_torch and "version" in env["torch"]
-        profile['minilm_available'] = config.enable_minilm and bool(env['packages'].get('sentence-transformers'))
+        # A hidden text task gets the optional frozen sentence encoder without
+        # requiring a task-specific config flag. Explicit enable_minilm stays
+        # valid for development experiments; tabular tasks do not pay this cost.
+        profile['minilm_available'] = _minilm_available(config, profile, env)
         profile['feature_search_enabled'] = config.enable_feature_search
         cuda_enabled = profile["torch_available"] and env["torch"].get("cuda_available") and config.device != "cpu"
         if config.compute_profile == "gpu_large" and not cuda_enabled:
@@ -175,11 +211,20 @@ def _train_agent(config, output, resume_from=None):
             config.compute_profile = 'auto'
             config.device = 'auto'
         profile["compute_profile"] = ("gpu_large" if cuda_enabled else "standard") if config.compute_profile == "auto" else config.compute_profile
+        # The verified tabular/text frontier used three training seeds per
+        # candidate. A single seed makes validation selection noticeably
+        # noisier on GPU; restore that generic stability without touching test.
+        if (config.stability_repeats == 1 and cuda_enabled
+                and profile['data_type'] in {'tabular', 'text'}):
+            config.stability_repeats = 3
+            event(output, 'gpu_stability_enabled', stability_repeats=3)
+        if resumed and config.to_dict() != resumed['manifest']['config']:
+            raise ValueError('Effective runtime configuration changed after verified data analysis')
         write_json(output / "profile.json", profile)
-        manifest = {"config": config.to_dict(), "source_sha256": source_hash,
+        manifest = {"config": config.to_dict(), "requested_config": requested_config, "source_sha256": source_hash,
                     "data_sha256": hashes, "split": split,
-                    "test_data_read_during_training": bool(config.test_csv and config.progressive_output),
-                    "test_access_policy": "Partial feature-only inference may follow checkpoint selection; test labels/scores never enter search. Final inference follows final selection.",
+                    "test_data_read_during_training": False,
+                    "test_access_policy": "Test input is blocked throughout search and refitting. Only final prediction/evaluation follows selection.",
                     "submission": submission, "model_usage": "model_usage.json",
                     "resource_accounting": "wall-clock, configured threads, CUDA training memory and official-standard-price LLM token costs"}
         write_json(output / "manifest.json", manifest)
@@ -198,6 +243,8 @@ def _train_agent(config, output, resume_from=None):
             if remaining <= 0:
                 event(output, "search_stopped", reason="Search allocation exhausted; preserve final-fit time")
                 break
+            profile['remaining_search_seconds'] = remaining
+            profile['trial_timeout_seconds'] = config.trial_timeout_seconds
             candidate, reason = planner.choose(profile, history, config.metric, search_deadline)
             if candidate is None:
                 event(output, "search_stopped", reason=reason)
@@ -207,8 +254,11 @@ def _train_agent(config, output, resume_from=None):
                 event(output, "search_stopped", reason="Planning used the remaining search allocation")
                 break
             folder = output / "experiments" / f"trial_{trial_number:03d}"
+            trial_metadata = {"schema_version": 1, "config": config.to_dict(), "profile": profile,
+                              "candidate": candidate, "source_sha256": source_hash,
+                              "environment": env, "data_sha256": hashes, "submission": submission}
             event(output, "trial_started", trial=trial_number, candidate=candidate, reason=reason)
-            result = run_worker(dict(base_request, candidate=candidate, mode="trial"), folder,
+            result = run_worker(dict(base_request, candidate=candidate, mode="trial", metadata=trial_metadata), folder,
                                 min(config.trial_timeout_seconds, remaining), config.threads)
             record = {"trial": trial_number, "candidate": candidate, "reason": reason, **result}
             record['environment_ref'] = 'environment.json'
@@ -236,30 +286,9 @@ def _train_agent(config, output, resume_from=None):
                   outcome='failed' if record['status'] != 'success' else
                           ('new_best' if before is None or after > before else 'no_improvement'),
                   evidence_source='trials.jsonl; validation only')
-            previous = [h for h in history[:-1] if h['status'] == 'success']
-            if (config.progressive_output and record['status'] == 'success' and
-                (not previous or utility(record['score'], config.metric) > max(utility(h['score'], config.metric) for h in previous))):
-                checkpoint = output / 'partial' / f'v{trial_number:03d}'
-                partial_metadata = {'schema_version': 1, 'config': config.to_dict(), 'profile': profile,
-                    'candidate': candidate, 'source_sha256': source_hash, 'submission': submission,
-                    'partial': True, 'validation_score': record['score'], 'model_usage': planner.export_usage()}
-                event(output, 'partial_selection_completed', trial=trial_number, candidate=candidate)
-                allowance = min(config.trial_timeout_seconds, max(0, search_deadline-time.monotonic()) * .2)
-                if allowance > 1:
-                    result = run_worker(dict(base_request, candidate=candidate, mode='final',
-                        metadata=partial_metadata, model_path=str(checkpoint / 'model.joblib')),
-                        checkpoint, allowance, config.threads)
-                    if result['status'] == 'success':
-                        summary['partial_model_path'] = str(checkpoint / 'model.joblib')
-                        summary['partial_version'] = trial_number
-                        if config.test_csv:
-                            from superagent.evaluation.inference import predict
-                            event(output, 'partial_test_read_started', version=trial_number)
-                            summary['partial_predictions'] = predict(checkpoint / 'model.joblib', config.test_csv,
-                                                                     checkpoint / 'predictions.csv')
-                        write_json(checkpoint / 'summary.json', dict(summary, status='partial'))
-                        write_json(output / 'summary.json', summary)
-                    event(output, 'partial_checkpoint_finished', version=trial_number, **result)
+            if config.progressive_output and record['status'] == 'success':
+                event(output, 'partial_checkpoint_saved', trial=trial_number,
+                      model_path=record.get('checkpoint_path'), test_input_read=False)
         successful = [h for h in history if h["status"] == "success"]
         successful.sort(key=lambda h: utility(h["score"], config.metric), reverse=True)
         if not successful:
@@ -277,12 +306,15 @@ def _train_agent(config, output, resume_from=None):
                         "source_sha256": source_hash, "environment": env, "data_sha256": hashes,
                         "validation_score_is_not_final_test_score": True,
                         "submission": submission, "model_usage": usage,
-                        "selected_training_resources": record.get("training_resources")}
+                        "selected_training_resources": record.get("training_resources"),
+                        "selected_feature_resources": record.get('feature_resources', {})}
             event(output, "final_fit_started", rank=rank, trial=record["trial"],
                   candidate=record["candidate"], validation_score=record["score"])
             result = run_worker(dict(base_request, candidate=record["candidate"], mode="final",
                                      metadata=metadata, model_path=str(output / "model.joblib")),
-                                output / "experiments" / f"final_{rank:03d}", remaining, config.threads)
+                                output / "experiments" / f"final_{rank:03d}",
+                                min(config.trial_timeout_seconds, remaining * .6)
+                                if rank < len(successful) else remaining, config.threads)
             event(output, "final_fit_finished", rank=rank, **result)
             if result["status"] == "success":
                 selected = record
@@ -293,12 +325,26 @@ def _train_agent(config, output, resume_from=None):
                 abandoned = output / name
                 if abandoned.exists():
                     abandoned.unlink()
+        fallback_used = selected is None
+        if fallback_used:
+            from superagent.runtime.checkpoint import restore_validated_solution
+            for record in successful:
+                try:
+                    restored = restore_validated_solution(record, source_hash, usage, output / 'model.joblib')
+                except (ValueError, OSError) as exc:
+                    event(output, 'checkpoint_rejected', trial=record['trial'], reason=str(exc))
+                    continue
+                if restored:
+                    selected = record
+                    event(output, 'validated_checkpoint_selected', trial=record['trial'],
+                          reason='Final refits failed or allocation expired', test_input_read=False)
+                    break
         if selected is None:
-            raise RuntimeError("Final refit failed or time budget expired; validation records remain available")
+            raise RuntimeError("No usable refit or verified validation checkpoint remains")
         event(output, 'selection_completed', trial=selected['trial'], candidate=selected['candidate'])
         test_access[0] = False
         summary.update(status="completed", selected_trial=selected["trial"],
-                       partial=False,
+                       partial=fallback_used, final_refit_succeeded=not fallback_used,
                        selected_candidate=selected["candidate"], validation_score=selected["score"],
                        model_path=str(output / "model.joblib"), final_test_score=None)
         if config.test_csv:
@@ -336,7 +382,14 @@ def _train_agent(config, output, resume_from=None):
             summary["partial_model_path"] = str(output / name)
             summary.pop("model_path", None)
         summary['accounting_provisional'] = not summary.get('model_usage', {}).get('accounting_complete', False)
-        summary['eligible_for_formal_submission'] = not summary['accounting_provisional']
+        summary['formal_runtime_checks_passed'] = (
+            summary['status'] == 'completed' and config.evaluation_stage in {'released', 'unseen'}
+            and not summary['accounting_provisional']
+            and summary.get('model_usage', {}).get('within_budget', False))
+        # Runtime checks cannot certify model eligibility, authorship or the
+        # historical use of released tests. Never label a run fully compliant.
+        summary['eligible_for_formal_submission'] = False
+        summary['submission_review_required'] = True
         summary.update(trials=len(history), elapsed_seconds=time.monotonic() - started)
         write_json(output / "summary.json", summary)
         event(output, "run_finished", **summary)

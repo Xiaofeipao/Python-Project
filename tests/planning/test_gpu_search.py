@@ -19,7 +19,8 @@ class GpuPlannerContracts(unittest.TestCase):
                             "score": 0.8 if candidate["family"].startswith("torch_") else 0.9})
         families = [record["candidate"]["family"] for record in history]
         self.assertIn("torch_ensemble", families)
-        self.assertGreaterEqual(families.count("torch_resnet"), 3)
+        self.assertGreaterEqual(families.count("torch_resnet"), 2)
+        self.assertGreaterEqual(families.count("torch_pretrained"), 2)
         self.assertEqual(len({str(record["candidate"]) for record in history}), 12)
 
     def test_invalid_gpu_options(self):

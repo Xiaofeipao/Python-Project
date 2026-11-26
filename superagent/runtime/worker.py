@@ -1,7 +1,6 @@
 """Isolated worker. Launched only by an explicit train command."""
 
 import json
-import os
 import sys
 import time
 import traceback
@@ -50,8 +49,11 @@ def main():
         from superagent.common.json_io import write_json
         from superagent.evaluation.metrics import score_model
         from superagent.planning.search_space import build_model
+        from superagent.runtime.checkpoint import save_solution
 
         config = TaskConfig(**request["config"])
+        from superagent.governance.test_access import install_test_guard
+        install_test_guard(config.test_csv)
         data = joblib.load(request["data_path"])
         train, validation = data["train"], data["validation"]
         candidate = request["candidate"]
@@ -84,6 +86,14 @@ def main():
                 if config.nested_cv_folds:
                     from superagent.evaluation.nested_cv import nested_diagnostic
                     result['nested_validation']=nested_diagnostic(train,request['profile'],candidate,config)
+                # Keep the first-seed fitted pipeline as a last-resort solution.
+                # Only train rows were fitted; no test input is accessed here.
+                destination = Path(result_path).parent / 'validated_model.joblib'
+                metadata = dict(request['metadata'], partial=True, fit_scope='training_split_only',
+                                checkpoint_seed=config.seed, validation_seed_score=score)
+                save_solution(model, metadata, destination)
+                from superagent.preprocessing.datasets import file_hash
+                result.update(checkpoint_path=str(destination), checkpoint_sha256=file_hash(destination))
             else:
                 all_data = pd.concat([train, validation], ignore_index=True)
                 selected_resources = request["metadata"].get("selected_training_resources")
@@ -92,17 +102,14 @@ def main():
                     # epoch(s), without consulting the designated test set.
                     model.named_steps["classifier"].set_params(refit_epochs=selected_resources["best_epoch"])
                 model, recoveries = fit_with_fallback(model, all_data, labels(all_data, config.target_column))
-                # Prediction has no dependency on the training disk cache.
-                model.memory = None
-                if hasattr(model.named_steps['classifier'], 'cache_dir'):
-                    model.named_steps['classifier'].set_params(cache_dir=None)
                 destination = Path(request["model_path"])
-                temporary = destination.with_name(destination.name + ".tmp")
-                joblib.dump({"model": model, "metadata": request["metadata"]}, temporary)
-                os.replace(temporary, destination)
+                save_solution(model, dict(request['metadata'], partial=False,
+                                         fit_scope='training_and_validation'), destination)
                 result = {"status": "success", "model_path": str(destination)}
         estimator = model.named_steps["classifier"]
         result['hardware_recoveries'] = recoveries
+        result['feature_resources'] = {name: step.resource_report_ for name, step in model.steps
+                                       if hasattr(step, 'resource_report_')}
         if hasattr(estimator, "training_report_"):
             result["training_resources"] = estimator.training_report_
         elif hasattr(estimator, "resource_report_"):

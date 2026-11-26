@@ -102,7 +102,7 @@ def main():
         config["compute_profile"] = args.compute_profile
         if args.compute_profile == "gpu_large":
             config.update(max_trials=16, time_budget_seconds=1800, trial_timeout_seconds=300,
-                          neural_batch_size=256, mixed_precision=True, device="cuda")
+                          neural_batch_size=256, mixed_precision=True, device="auto")
         if args.max_trials is not None:
             config["max_trials"] = args.max_trials
         if args.budget is not None:

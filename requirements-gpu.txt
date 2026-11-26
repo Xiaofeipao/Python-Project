@@ -2,6 +2,7 @@
 # wheel for your GPU only if torch is absent; this file never selects a CUDA wheel.
 -r requirements.txt
 torch>=2.5,<3
+torchvision>=0.20,<1
 
 xgboost>=3.0,<4
 sentence-transformers>=5.7,<6

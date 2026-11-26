@@ -1,48 +1,42 @@
 {
-  "scope": "Observed development frontier, informational only; never loaded by the planner",
+  "scope": "Observed development result; informational only; never loaded by the planner",
   "source": "runs/best.json",
-  "source_sha256": "17524abe2a2d1ac677cf6bfda77a263ecaa2a5371b80395423628be1c63cd6d3",
-  "selection_rule": "highest held-out test accuracy observed on the current code; ties broken by lowest recorded LLM cost",
+  "source_sha256": "23dbe5ac97d9ff4fb0399de2682aaa12c86decef3783b84154767934cce0e928",
+  "selection_rule": "Within each task, the candidate is selected by official validation accuracy only; test is read once after final selection. No test-based cross-run selection.",
   "experiments": {
     "coupon": {
-      "run": "coupon-minilm2-20261123",
-      "evaluation_id": "coupon-minilm2-20261123",
-      "runtime_sha256": "98bf60efe1ef8dee813b2135a9617011f1c12b80d0043d3778ca5f4cab48a68c",
-      "scheme": "DeepSeek-V4.1-Flash planner, 12 trials, enable_minilm=true, enable_feature_search=true, stability_repeats=3, seed 42",
+      "run": "coupon-recover3-20261125/coupon",
+      "evaluation_id": "coupon-recover3-20261125-coupon",
+      "runtime_sha256": "b18fb33c134032e0a200241ff8eb49ba50381416bd71307ecc4015cf16736557",
+      "scheme": "DeepSeek-V4.1-Flash planner, 24 trials, threads=4, reserve=.30, off-peak 1/4 CNY, seed 42; deterministic generic anchor",
       "validation_accuracy": 0.7587848932676519,
       "test_accuracy": 0.7914860070949941,
       "correct_rows": 2008,
       "rows": 2537,
       "macro_f1": 0.7850800501239086,
-      "cost_rmb": "0.059672",
-      "trials": 12,
-      "selected_trial": 9,
+      "cost_rmb": "0.127797",
+      "trials": 24,
+      "selected_trial": 2,
       "selected_candidate": {
         "family": "cross_boost_blend",
         "gpu_seeds": 3,
         "gpu_weight": 0.275,
         "leaf_weight": 0.0
-      },
-      "gain_over_next_best": "+0.08 pt, two extra rows; inside seed noise",
-      "cheapest_equivalent": {
-        "run": "coupon-gpu-20261123",
-        "test_accuracy": 0.7906976744186046,
-        "cost_rmb": "0.014231"
       }
     },
     "headlines": {
-      "run": "headlines-overlap-20261125",
-      "evaluation_id": "headlines-overlap-20261125",
-      "runtime_sha256": "7d7097ad550828b0c5518b039ecd384530e3260bc04bfc62e1e539eeec276874",
-      "scheme": "DeepSeek-V4.1-Flash planner, 12 trials, enable_minilm=true, enable_feature_search=true, stability_repeats=3, seed 42",
+      "run": "headlines-recover2-20261125/headlines",
+      "evaluation_id": "headlines-recover2-20261125-headlines",
+      "runtime_sha256": "416d697ffc5f3a92100c19ea009e7aa8ce6c273767c6b1500550e3f768c36f8e",
+      "scheme": "DeepSeek-V4.1-Flash planner, 24 trials, threads=4, reserve=.30, off-peak 1/4 CNY, seed 42; deterministic generic anchor",
       "validation_accuracy": 0.7031914893617022,
       "test_accuracy": 0.698019801980198,
       "correct_rows": 2256,
       "rows": 3232,
       "macro_f1": 0.6980002581102729,
-      "cost_rmb": "0.073455",
-      "trials": 12,
-      "selected_trial": 8,
+      "cost_rmb": "0.150799",
+      "trials": 24,
+      "selected_trial": 2,
       "selected_candidate": {
         "family": "pairwise_overlap",
         "C": 1.0,
@@ -53,16 +47,15 @@
             6
           ]
         }
-      },
-      "gain_over_next_best": "+0.09 pt, three extra rows over headlines-v6-20261124 (0.697092); validation 0.7032 vs 0.7000",
-      "caveat": "gain comes from seven standardized word-level overlap features on top of the char_wb difference vectorizer; five of twelve trials still went to minilm_logistic before the planner reached the pairwise menu, and a fine-tuned MiniLM cross-encoder reached only 0.671 on validation (offline screen), so the ceiling is the linear model plus hand-built pair statistics rather than encoder capacity."
+      }
     }
   },
-  "selected_run_cost_rmb": "0.133127",
+  "selected_run_cost_rmb": "0.278596",
   "same_frozen_runtime": false,
   "limitations": [
-    "Released test data was reused during development.",
-    "Cross-run reported results are not an unbiased final estimate.",
-    "The selected runs use different frozen runtime hashes."
+    "Development run; released test data was reused across development experiments.",
+    "This is not an unbiased final evaluation and the checkout is not frozen.",
+    "Coupon and headlines runtime snapshots differ in planner anchor ordering only; model and training paths are unchanged.",
+    "Both ledgers are accounting-complete at off-peak 1/4 CNY prices."
   ]
 }

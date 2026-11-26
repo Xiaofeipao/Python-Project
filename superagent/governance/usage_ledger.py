@@ -32,8 +32,8 @@ ROLLING_ALIASES = {
     "qwen-turbo", "qwen-long", "qwen-flash", "qwen3-max",
 }
 
-# Official 2026-09-10 effective off-peak cache-miss rates, CNY / million tokens.
-# Fixed accounting policy requested for this project; not provider invoice rates.
+# Official 2026-10-21 off-peak cache-miss rates, CNY / million tokens.
+# The user explicitly selected the off-peak convention for the final run.
 FLASH_OFF_PEAK_RATES = ('1', '4')
 
 
@@ -87,7 +87,7 @@ class ModelCatalog:
         self.path = Path(path).resolve()
         self.raw = json.loads(self.path.read_text(encoding="utf-8-sig"))
         if self.raw.get("schema_version") != 1 or self.raw.get("pricing_as_of") != MODEL_CUTOFF or self.raw.get("currency") != "CNY":
-            raise ValueError("Registry must use official CNY standard prices as of 2026-10-21")
+            raise ValueError("Registry must use official CNY prices as of 2026-10-21")
         if not isinstance(self.raw.get("models"), list):
             raise ValueError("Model registry needs a models list")
         self.models = {}
@@ -105,7 +105,7 @@ class ModelCatalog:
         if model.get('model_id') == 'DeepSeek-V4.1-Flash':
             rates = tuple(amount(model.get(k)) for k in ('input_rmb_per_million', 'output_rmb_per_million'))
             if rates != tuple(map(amount, FLASH_OFF_PEAK_RATES)) or model.get('pricing_tiers'):
-                raise ValueError('Flash accounting rates must match the fixed official off-peak policy')
+                raise ValueError('Flash accounting rates must match user-selected off-peak 1/4 CNY per million tokens')
         family = model.get("family")
         key = model.get("model_id", "")
         if family not in {"Qwen", "DeepSeek"} or not isinstance(key, str) or not key.lower().startswith(family.lower()):
@@ -115,7 +115,7 @@ class ModelCatalog:
         if date.fromisoformat(model["release_date"]) > date.fromisoformat(MODEL_CUTOFF):
             raise ValueError("Model was released after the course cutoff")
         if model.get("standard_pricing") is not True:
-            raise ValueError("Registry entry requires official standard pricing")
+            raise ValueError("Registry entry requires a fixed published pricing entry")
         if tokens(model["context_window_tokens"]) == 0:
             raise ValueError("Official context window is required for conservative reservation")
         if model.get("pricing_basis", "input_tokens") != "input_tokens":
@@ -125,7 +125,7 @@ class ModelCatalog:
         for index, row in enumerate(rows):
             for name in ("input_rmb_per_million", "output_rmb_per_million"):
                 if amount(row[name]) <= 0:
-                    raise ValueError("Use official positive standard prices, not free-credit rates")
+                    raise ValueError("Use official positive published prices, not free-credit rates")
             upper = row["input_tokens_up_to"]
             if upper is None:
                 if index != len(rows) - 1:
@@ -188,9 +188,11 @@ def official_cost(model, input_tokens, output_tokens):
             + amount(rates["output_rmb_per_million"]) * output_tokens) / Decimal(1_000_000)
 
 
-def worst_case_cost(model):
+def worst_case_cost(model, max_output_tokens=None):
     rates = pricing_rows(model)
-    output_limit = min(model['context_window_tokens'], tokens(model.get('official_output_limit_tokens', model['context_window_tokens'])))
+    requested_output = tokens(max_output_tokens) if max_output_tokens is not None else model['context_window_tokens']
+    official_output = tokens(model.get('official_output_limit_tokens', requested_output))
+    output_limit = min(model['context_window_tokens'], official_output, requested_output)
     return (max(amount(r['input_rmb_per_million']) for r in rates) * model['context_window_tokens'] +
             max(amount(r['output_rmb_per_million']) for r in rates) * output_limit) / Decimal(1_000_000)
 
@@ -235,7 +237,7 @@ class UsageLedger:
             rates = pricing_rows(model)
             # Cover reasoning output too, even on a provider whose max_tokens
             # interpretation is narrower than total generated output tokens.
-            reserve = worst_case_cost(model)
+            reserve = worst_case_cost(model, max_output_tokens)
             if spent + reserve > self.budget:
                 raise BudgetExhausted("Next worst-case model request would exceed this task's RMB budget")
             call = {"call_id": uuid.uuid4().hex, "agent_id": agent_id, "run_id": run_id,

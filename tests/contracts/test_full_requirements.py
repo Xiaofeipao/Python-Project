@@ -184,5 +184,48 @@ class FormalRequirements(unittest.TestCase):
             self.assertEqual(planner.export_usage()["actual_recorded_cost_rmb"], "0.00012")
 
 
+    def test_one_short_repair_is_charged_then_stops(self):
+        import time
+        output = self.root / 'repair'
+        output.mkdir()
+        config = TaskConfig(train_csv='unused', target_column='label', llm_mode='required',
+            llm_max_output_tokens=512, llm_registry=str(self.registry), llm_model_id=self.model['model_id'],
+            llm_base_url='http://127.0.0.1:1/v1')
+        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}]
+        payload = {'model': self.model['model_id'],
+                   'usage': {'prompt_tokens': 100, 'completion_tokens': 10, 'total_tokens': 110},
+                   'choices': [{'message': {'content': 'invalid JSON'}}]}
+        with patch.dict(os.environ, {'SUPERAGENT_USAGE_ROOT': str(self.root/'repair_ledger')}):
+            planner = AutonomousPlanner(config, output, 'repair-fixture')
+            with patch('superagent.planning.llm.build_opener') as mocked:
+                mocked.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps(payload).encode()
+                for _ in range(5):
+                    planner.choose(self.profile(), history, 'accuracy', time.monotonic()+30)
+                self.assertEqual(mocked.return_value.open.call_count, 3)
+            self.assertEqual(planner.export_usage()['actual_recorded_cost_rmb'], '0.00036')
+            requests = [json.loads(p.read_text(encoding='utf-8')) for p in (output/'model_calls').glob('*.request.json')]
+            contexts = [json.loads(r['body']['messages'][1]['content']) for r in requests]
+            repairs = [c for c in contexts if 'instruction' in c]
+            self.assertEqual(len(repairs), 1)
+            self.assertNotIn('previous_experiments', repairs[0])
+
+    def test_ambiguous_timeout_is_not_retried(self):
+        import time
+        output = self.root / 'timeout'
+        output.mkdir()
+        config = TaskConfig(train_csv='unused', target_column='label', llm_mode='required',
+            llm_max_output_tokens=512, llm_registry=str(self.registry), llm_model_id=self.model['model_id'],
+            llm_base_url='http://127.0.0.1:1/v1')
+        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}]
+        with patch.dict(os.environ, {'SUPERAGENT_USAGE_ROOT': str(self.root/'timeout_ledger')}):
+            planner = AutonomousPlanner(config, output, 'timeout-fixture')
+            with patch('superagent.planning.llm.build_opener') as mocked:
+                mocked.return_value.open.side_effect = TimeoutError('Unknown server usage')
+                with self.assertRaises(TimeoutError):
+                    planner.choose(self.profile(), history, 'accuracy', time.monotonic()+30)
+                self.assertEqual(mocked.return_value.open.call_count, 1)
+            self.assertFalse(planner.export_usage()['accounting_complete'])
+
+
 if __name__ == "__main__":
     unittest.main()

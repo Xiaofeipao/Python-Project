@@ -62,9 +62,11 @@ class ResilienceTests(unittest.TestCase):
                 test_csv=str(root/'test.csv'), target_column='label', id_column='id', device='cpu',
                 enable_torch=False, progressive_output=True, max_trials=1, time_budget_seconds=300), root/'run')
             self.assertFalse(result['test_set_used_for_selection'])
-            self.assertTrue((root/'run/partial/v001/predictions.csv').exists())
+            self.assertFalse((root/'run/partial/v001/predictions.csv').exists())
+            self.assertTrue((root/'run/experiments/trial_001/validated_model.joblib').exists())
             events = [json.loads(s) for s in (root/'run/events.jsonl').read_text().splitlines()]
             selected = next(e for e in events if e['event']=='selection_completed')
+            self.assertNotIn('partial_test_read_started', [e['event'] for e in events])
             read = next(e for e in events if e['event']=='test_read_started')
             self.assertLessEqual(selected['timestamp_utc'], read['timestamp_utc'])
             self.assertTrue((root/'run/predictions.csv').exists())

@@ -12,7 +12,7 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 6. **Few-shot examples: two implemented.** Parsing and validation remain authoritative. Offline/local-fallback runs do not establish improved real-model output reliability.
 7. **Candidate list: current decision menu implemented.** Choices must reference it and overrides must obey rules. This does not enumerate an infinite parameter space or allow arbitrary model code.
 8. **Rejected-proposal feedback: implemented.** Reasons enter logs and subsequent context. Accepted plans clear stale rejection state.
-9. **Fallback reflection: bounded implementation.** Repeated invalid JSON disables API planning for the run. Network failures are recorded separately. No extra paid reflection-model branch was added.
+9. **Fallback reflection: bounded implementation.** Two consecutive invalid plans allow one shorter, separately accounted repair request. Failed repair leaves planning local. Recovery retains the allowance. Unknown-usage network failures are never replayed. This is one planner, not a reflection subagent.
 
 ## Stability and generalization: suggestions 10-13
 
@@ -28,7 +28,7 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 
 ## Test isolation: original section five
 
-16. **Read guard: bounded implementation.** governance/test_access.py blocks the configured test_csv in the current Python training interpreter before selection. It is not an OS sandbox for native code, other processes or arbitrary file aliases.
+16. **Read guard: bounded implementation.** governance/test_access.py blocks the configured test_csv in the controller and fitting workers before selection. Canonical paths and file-identity aliases are checked. It is not an OS sandbox against arbitrary native code. progressive_output saves models only and never predicts test during search.
 17. **Timing evidence: scoped implementation.** Configured final prediction logs selection_completed and test_read_started timestamps. Batch conversion follows completed training, but not every OS file access is globally logged.
 18. **Train-only fitting: implemented and tested.** Scaling, vocabularies, encoding, selection and SVD fit each appropriate training partition. Nested folds rebuild models. Final train-plus-validation refitting remains distinct from test statistics.
 

@@ -3,67 +3,32 @@
   "snapshot_date": "2026-11-25",
   "scope": "All ledger.json files currently present under .model_usage; read-only inventory, not a replacement ledger",
   "currency": "CNY",
-  "ledger_count": 16,
-  "call_count": 144,
-  "recorded_cost_rmb": "1.3933580",
-  "missing_cost_records": 0,
-  "unresolved_reservation_rmb": "0",
+  "pricing_regime": "mixed historical off-peak and new standard/peak (Flash 2/8, Pro 9/27)",
+  "ledger_count": 23,
+  "call_count": 285,
+  "recorded_cost_rmb": "2.6403150",
+  "conservative_reconciled_cost_rmb": "5.24288",
+  "unresolved_reservation_rmb": "5.24288",
+  "standard_price_ledgers": [
+    "released-std-20261125-headlines",
+    "released-std-20261125-coupon"
+  ],
   "ledgers": [
     {
-      "evaluation_id": "coupon-ens-20261123",
-      "source": ".model_usage/d1af299253efec2650ed3ee86b277be127a486d8801dcb7fd9306759cbffcc8b/ledger.json",
-      "sha256": "7f9851485f9a730c282aa9ebd6aba623489ca294c4c45d625e2de4631d5255b7",
-      "calls": 5,
+      "evaluation_id": "released-std-20261125-headlines",
+      "source": ".model_usage/005b5c1cdb19168b77ce239e8adbf15d4be82cd9f4bf51c41a42ee335e7faccc/ledger.json",
+      "sha256": "87b1cdf924c39f5c127f3379426d89e391a7ee15e43e537809a5c540a4a6b4d3",
+      "calls": 23,
       "statuses": {
-        "recorded": 5
+        "recorded": 23
       },
-      "input_tokens": 7434,
-      "output_tokens": 4483,
-      "recorded_cost_rmb": "0.025366",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "coupon-gpu-20261123",
-      "source": ".model_usage/3244fbf72cf3ca566dd72baabf34614681a9ca88903377285296b0184875693a/ledger.json",
-      "sha256": "402acb1a940a4f7cf52d75aecea5b00bfbf08b784e053374a9c928dac3d9c624",
-      "calls": 3,
-      "statuses": {
-        "recorded": 3
-      },
-      "input_tokens": 3915,
-      "output_tokens": 2579,
-      "recorded_cost_rmb": "0.014231",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "coupon-minilm2-20261123",
-      "source": ".model_usage/a8b40c719608e202ff90685c9976c6ef42048b1bebe2be531be04cd432e0e8b3/ledger.json",
-      "sha256": "0aa8e000b2a3aae131a13b16ad80848c9c78dd54793f8f7a702e8d6784b212b4",
-      "calls": 11,
-      "statuses": {
-        "recorded": 11
-      },
-      "input_tokens": 21356,
-      "output_tokens": 9579,
-      "recorded_cost_rmb": "0.059672",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "coupon-pro-20261123",
-      "source": ".model_usage/b9f8b7191ccd06c4cbd8148c0e120782c3ec1ef3e2379029b72d54c4919c3b96/ledger.json",
-      "sha256": "a122361b1dcf7247fd3d5dccd6bcc48867138396acc052b4701a129a3975821a",
-      "calls": 2,
-      "statuses": {
-        "recorded": 2
-      },
-      "input_tokens": 2595,
-      "output_tokens": 8192,
-      "recorded_cost_rmb": "0.12227",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "input_tokens": 55007,
+      "output_tokens": 29113,
+      "recorded_cost_rmb": "0.342918",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": true
     },
     {
       "evaluation_id": "coupon-t10-20261123",
@@ -76,50 +41,10 @@
       "input_tokens": 14541,
       "output_tokens": 10877,
       "recorded_cost_rmb": "0.058049",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "coupon-t14r-20261123",
-      "source": ".model_usage/7dee1dfeaf6b8738c075c26290e1688cb36ef4306260258343731cc273d65ea2/ledger.json",
-      "sha256": "576963edfa231a1f02b5032958f8484bfb474d9946fdae06ae86ac62aea06478",
-      "calls": 13,
-      "statuses": {
-        "recorded": 13
-      },
-      "input_tokens": 22316,
-      "output_tokens": 10672,
-      "recorded_cost_rmb": "0.065004",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "coupon-v6-20261124",
-      "source": ".model_usage/50a0627d3ba05cbcfb564e468cb30a66ee5f024da1ca33f120a94ac0dfeb0a6e/ledger.json",
-      "sha256": "c7a9862ad50bf230dddd6a375043bcdb28a2a6b989e465d780fdc835b2a44d55",
-      "calls": 11,
-      "statuses": {
-        "recorded": 11
-      },
-      "input_tokens": 20352,
-      "output_tokens": 12371,
-      "recorded_cost_rmb": "0.069836",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "headlines-ens-20261123",
-      "source": ".model_usage/7546d324c436d8f498b4e62af2221ee9ed1877fe33c3a31271cf7fa16fc7f620/ledger.json",
-      "sha256": "7669261a1aaa4737a7e872126eddcb123c8071c86f392aaf59c99f008f6bc1c2",
-      "calls": 9,
-      "statuses": {
-        "recorded": 9
-      },
-      "input_tokens": 16829,
-      "output_tokens": 10243,
-      "recorded_cost_rmb": "0.057801",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     },
     {
       "evaluation_id": "headlines-gpu-20261123",
@@ -132,78 +57,42 @@
       "input_tokens": 16120,
       "output_tokens": 10168,
       "recorded_cost_rmb": "0.056792",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     },
     {
-      "evaluation_id": "headlines-minilm2-20261123",
-      "source": ".model_usage/7a8dab993a7322afc0ede8c02cdc2372c7afc44aa2f3a55def136098620304b8/ledger.json",
-      "sha256": "82837ec608004de90c4610b58ea451f70845317040e40de6388f4a36488f02a8",
-      "calls": 11,
+      "evaluation_id": "coupon-gpu-20261123",
+      "source": ".model_usage/3244fbf72cf3ca566dd72baabf34614681a9ca88903377285296b0184875693a/ledger.json",
+      "sha256": "402acb1a940a4f7cf52d75aecea5b00bfbf08b784e053374a9c928dac3d9c624",
+      "calls": 3,
       "statuses": {
-        "recorded": 11
+        "recorded": 3
       },
-      "input_tokens": 22446,
-      "output_tokens": 13552,
-      "recorded_cost_rmb": "0.076654",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "input_tokens": 3915,
+      "output_tokens": 2579,
+      "recorded_cost_rmb": "0.014231",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     },
     {
-      "evaluation_id": "headlines-minilm3-20261123",
-      "source": ".model_usage/7931f8dabeb1848d09f70d15b7312c6619a7e1343ae2d06d594cf04a93665df5/ledger.json",
-      "sha256": "afe51f41b2e03459c0dc0531157b1188840ed7a2bc8e8538b5c7dc1f1d5d852a",
-      "calls": 11,
+      "evaluation_id": "coupon-current24-20261125",
+      "source": ".model_usage/3e1df3f7d2876bd60561757f84989c89aafab504fa48935385827fbbe8db5462/ledger.json",
+      "sha256": "7a7553d6446f559684e8258dbd7bf323a6096e51503c02df23477ac00b27af02",
+      "calls": 23,
       "statuses": {
-        "recorded": 11
+        "recorded": 23
       },
-      "input_tokens": 21534,
-      "output_tokens": 11564,
-      "recorded_cost_rmb": "0.06779",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "headlines-overlap-20261125",
-      "source": ".model_usage/689781efd26488f7e8b4ff30d046d2b0277a1c08f92b99140d03d8bd49f8ddc9/ledger.json",
-      "sha256": "246a46059e4ba1f76b82443d277c9ac2ea012fdf4c25166fbeab64205d76ff7c",
-      "calls": 11,
-      "statuses": {
-        "recorded": 11
-      },
-      "input_tokens": 21787,
-      "output_tokens": 12917,
-      "recorded_cost_rmb": "0.073455",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "headlines-pro2-20261123",
-      "source": ".model_usage/4da5a876483f86711e7bec787983192bf24752a77858423da8f53b68861666e3/ledger.json",
-      "sha256": "9439a4176b18d4fdb2e16b81ffeb72ad8052c7e1b30c6a3ddea30e9139d98631",
-      "calls": 8,
-      "statuses": {
-        "recorded": 8
-      },
-      "input_tokens": 15471,
-      "output_tokens": 28546,
-      "recorded_cost_rmb": "0.45499",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
-    },
-    {
-      "evaluation_id": "headlines-t15-20261123",
-      "source": ".model_usage/b5c09f1afee7a90002f34d62f4aa014e37ac33610e1c1f36861273f317f4dcc5/ledger.json",
-      "sha256": "35c8f8c51a2aa225c33a4daa1117a16f85d6b8301e435093b37a4dec0a4fe91c",
-      "calls": 11,
-      "statuses": {
-        "recorded": 11
-      },
-      "input_tokens": 20576,
-      "output_tokens": 13433,
-      "recorded_cost_rmb": "0.074308",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "input_tokens": 43785,
+      "output_tokens": 22620,
+      "recorded_cost_rmb": "0.134265",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     },
     {
       "evaluation_id": "headlines-t20r-20261123",
@@ -216,8 +105,252 @@
       "input_tokens": 28783,
       "output_tokens": 15199,
       "recorded_cost_rmb": "0.089579",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-pro2-20261123",
+      "source": ".model_usage/4da5a876483f86711e7bec787983192bf24752a77858423da8f53b68861666e3/ledger.json",
+      "sha256": "9439a4176b18d4fdb2e16b81ffeb72ad8052c7e1b30c6a3ddea30e9139d98631",
+      "calls": 8,
+      "statuses": {
+        "recorded": 8
+      },
+      "input_tokens": 15471,
+      "output_tokens": 28546,
+      "recorded_cost_rmb": "0.4549905",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-v6-20261124",
+      "source": ".model_usage/50a0627d3ba05cbcfb564e468cb30a66ee5f024da1ca33f120a94ac0dfeb0a6e/ledger.json",
+      "sha256": "c7a9862ad50bf230dddd6a375043bcdb28a2a6b989e465d780fdc835b2a44d55",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 20352,
+      "output_tokens": 12371,
+      "recorded_cost_rmb": "0.069836",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-overlap-20261125",
+      "source": ".model_usage/689781efd26488f7e8b4ff30d046d2b0277a1c08f92b99140d03d8bd49f8ddc9/ledger.json",
+      "sha256": "246a46059e4ba1f76b82443d277c9ac2ea012fdf4c25166fbeab64205d76ff7c",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 21787,
+      "output_tokens": 12917,
+      "recorded_cost_rmb": "0.073455",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-ens-20261123",
+      "source": ".model_usage/7546d324c436d8f498b4e62af2221ee9ed1877fe33c3a31271cf7fa16fc7f620/ledger.json",
+      "sha256": "7669261a1aaa4737a7e872126eddcb123c8071c86f392aaf59c99f008f6bc1c2",
+      "calls": 9,
+      "statuses": {
+        "recorded": 9
+      },
+      "input_tokens": 16829,
+      "output_tokens": 10243,
+      "recorded_cost_rmb": "0.057801",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "released-std-20261125-coupon",
+      "source": ".model_usage/78dcdd2955c714b75d58c9ad33c418b3e69f3f69bee440ae9c34590c22c02f3d/ledger.json",
+      "sha256": "f3ff569a161fc7cfeda74c3127d3a610908402024c5a68cf424288c9874b2ec2",
+      "calls": 23,
+      "statuses": {
+        "recorded": 23
+      },
+      "input_tokens": 50413,
+      "output_tokens": 22190,
+      "recorded_cost_rmb": "0.278346",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": true
+    },
+    {
+      "evaluation_id": "headlines-minilm3-20261123",
+      "source": ".model_usage/7931f8dabeb1848d09f70d15b7312c6619a7e1343ae2d06d594cf04a93665df5/ledger.json",
+      "sha256": "afe51f41b2e03459c0dc0531157b1188840ed7a2bc8e8538b5c7dc1f1d5d852a",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 21534,
+      "output_tokens": 11564,
+      "recorded_cost_rmb": "0.067790",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-minilm2-20261123",
+      "source": ".model_usage/7a8dab993a7322afc0ede8c02cdc2372c7afc44aa2f3a55def136098620304b8/ledger.json",
+      "sha256": "82837ec608004de90c4610b58ea451f70845317040e40de6388f4a36488f02a8",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 22446,
+      "output_tokens": 13552,
+      "recorded_cost_rmb": "0.076654",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "released-coupon",
+      "source": ".model_usage/7c66d6bb9fe19efa363958349251efbe4ac774703fba9a05be6d96b0f250b4e2/ledger.json",
+      "sha256": "8d23cadff41b6032abd419f2a68370edcceec7cedb52922fad2c0b0f72ab89bb",
+      "calls": 23,
+      "statuses": {
+        "recorded": 23
+      },
+      "input_tokens": 50294,
+      "output_tokens": 26936,
+      "recorded_cost_rmb": "0.158038",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-t14r-20261123",
+      "source": ".model_usage/7dee1dfeaf6b8738c075c26290e1688cb36ef4306260258343731cc273d65ea2/ledger.json",
+      "sha256": "576963edfa231a1f02b5032958f8484bfb474d9946fdae06ae86ac62aea06478",
+      "calls": 13,
+      "statuses": {
+        "recorded": 13
+      },
+      "input_tokens": 22316,
+      "output_tokens": 10672,
+      "recorded_cost_rmb": "0.065004",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-minilm2-20261123",
+      "source": ".model_usage/a8b40c719608e202ff90685c9976c6ef42048b1bebe2be531be04cd432e0e8b3/ledger.json",
+      "sha256": "0aa8e000b2a3aae131a13b16ad80848c9c78dd54793f8f7a702e8d6784b212b4",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 21356,
+      "output_tokens": 9579,
+      "recorded_cost_rmb": "0.059672",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-t15-20261123",
+      "source": ".model_usage/b5c09f1afee7a90002f34d62f4aa014e37ac33610e1c1f36861273f317f4dcc5/ledger.json",
+      "sha256": "35c8f8c51a2aa225c33a4daa1117a16f85d6b8301e435093b37a4dec0a4fe91c",
+      "calls": 11,
+      "statuses": {
+        "recorded": 11
+      },
+      "input_tokens": 20576,
+      "output_tokens": 13433,
+      "recorded_cost_rmb": "0.074308",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-pro-20261123",
+      "source": ".model_usage/b9f8b7191ccd06c4cbd8148c0e120782c3ec1ef3e2379029b72d54c4919c3b96/ledger.json",
+      "sha256": "a122361b1dcf7247fd3d5dccd6bcc48867138396acc052b4701a129a3975821a",
+      "calls": 2,
+      "statuses": {
+        "recorded": 2
+      },
+      "input_tokens": 2595,
+      "output_tokens": 8192,
+      "recorded_cost_rmb": "0.1222695",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-current-20261125",
+      "source": ".model_usage/c56422f470b7300c4bcf80ebb67b80b0f6379991376fbf9b9d177d4b2254fb3f/ledger.json",
+      "sha256": "848254df6f0be21ac86d44d0e5f5e1631c6410e3fcea0e7c30146afe95b733a1",
+      "calls": 3,
+      "statuses": {
+        "recorded": 2,
+        "pending": 1
+      },
+      "input_tokens": 3044,
+      "output_tokens": 1302,
+      "recorded_cost_rmb": "0.008252",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "5.24288",
+      "accounting_complete": false,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "released-headlines",
+      "source": ".model_usage/cacc85d34b8c7d5597bcbca373fe5f7324f7a78bf7da48f7eb9adee52655213d/ledger.json",
+      "sha256": "879bb99c8b2e077b7e45ced00e527d8e40396601f7e1e78d009a5ca931c9c495",
+      "calls": 23,
+      "statuses": {
+        "recorded": 22,
+        "reconciled_conservative": 1
+      },
+      "input_tokens": 51551,
+      "output_tokens": 26303,
+      "recorded_cost_rmb": "0.156763",
+      "conservative_reconciled_cost_rmb": "5.24288",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": false,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "coupon-ens-20261123",
+      "source": ".model_usage/d1af299253efec2650ed3ee86b277be127a486d8801dcb7fd9306759cbffcc8b/ledger.json",
+      "sha256": "7f9851485f9a730c282aa9ebd6aba623489ca294c4c45d625e2de4631d5255b7",
+      "calls": 5,
+      "statuses": {
+        "recorded": 5
+      },
+      "input_tokens": 7434,
+      "output_tokens": 4483,
+      "recorded_cost_rmb": "0.025366",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     },
     {
       "evaluation_id": "headlines-v6-20261124",
@@ -230,8 +363,26 @@
       "input_tokens": 8749,
       "output_tokens": 4703,
       "recorded_cost_rmb": "0.027561",
-      "missing_cost_records": 0,
-      "unresolved_reservation_rmb": "0"
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
+    },
+    {
+      "evaluation_id": "headlines-current24b-20261125",
+      "source": ".model_usage/db196714576ddcff223a798c61b221c80a90f3de45f40614e61ef204615bc4ca/ledger.json",
+      "sha256": "cfecf2b9d63a557045db91c6cea5b9a5d499a0ecc582bbb6430976acf445b00d",
+      "calls": 23,
+      "statuses": {
+        "recorded": 23
+      },
+      "input_tokens": 50095,
+      "output_tokens": 29570,
+      "recorded_cost_rmb": "0.168375",
+      "conservative_reconciled_cost_rmb": "0",
+      "unresolved_reservation_rmb": "0",
+      "accounting_complete": true,
+      "pricing_standard_2_8_or_9_27": false
     }
   ]
 }

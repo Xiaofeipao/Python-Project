@@ -48,7 +48,7 @@ def main():
         name=row['evaluation_id'].rsplit('-',1)[0]
         tex.append(f"\\texttt{{{escape(name)}}}&{row['calls']}&{row['recorded_cost_rmb']}\\\\")
     tex.append(r'\midrule Total&'+str(inventory['call_count'])+'&'+inventory['recorded_cost_rmb']+r'\\\bottomrule\end{tabular}}')
-    labels={'cross_boost_blend':'Boost blend','minilm_logistic':'MiniLM LR','logistic':'Logistic','text_blend':'Text blend','linear_svm':'Linear SVM','dummy':'Prior baseline','pairwise_overlap':'Overlap LR','pairwise_blend':'Pair blend'}
+    labels={'cross_boost_blend':'Boost blend','minilm_logistic':'MiniLM LR','logistic':'Logistic','text_blend':'Text blend','text_blend_diff':'Text blend (diff)','linear_svm':'Linear SVM','dummy':'Prior baseline','pairwise_overlap':'Overlap LR','pairwise_blend':'Pair blend'}
     for task,r in zip(('Coupon','Headlines'),records):
         tex.append('\\newcommand{\\'+task+r'Trials}{\begin{tabular}{rlrr}\toprule Trial&Family&Mean (\%)&SD (pt)\\\midrule')
         for t in r['trials']:

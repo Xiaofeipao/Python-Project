@@ -25,7 +25,7 @@ def main():
     policy = output / "smoke_policy.json"
     policy.write_text(json.dumps({"max_trials": 3, "time_budget_seconds": 180,
                                   "trial_timeout_seconds": 60, "threads": 2,
-                                  "device": "cuda", "compute_profile": "gpu_large",
+                                  "device": "auto", "compute_profile": "auto",
                                   "llm_mode": "disabled"}), encoding="utf-8")
     bundle = output / "frozen_development_copy"
     frozen = freeze_submission(policy, bundle)

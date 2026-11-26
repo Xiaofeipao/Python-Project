@@ -75,6 +75,9 @@ class ExtensionTests(unittest.TestCase):
                 return ({'family':'dummy'} if not history else {'family':'logistic','C':1/len(history)}),'test fixture'
             with patch('superagent.runtime.orchestrator.run_worker',side_effect=worker),patch('superagent.planning.llm.AutonomousPlanner.choose',side_effect=plan):
                 with self.assertRaises(KeyboardInterrupt):train_agent(cfg,root/'first')
+            self.assertEqual(cfg.stability_repeats, 1)
+            # A real CLI restart reconstructs the requested config from disk.
+            cfg = TaskConfig(**cfg.to_dict())
             with patch('superagent.planning.llm.AutonomousPlanner.choose',side_effect=plan):
                 result=train_agent(cfg,root/'resumed',root/'first')
             self.assertEqual(result['status'],'completed')
