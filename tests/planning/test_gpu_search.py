@@ -23,6 +23,16 @@ class GpuPlannerContracts(unittest.TestCase):
         self.assertGreaterEqual(families.count("torch_pretrained"), 2)
         self.assertEqual(len({str(record["candidate"]) for record in history}), 12)
 
+    def test_pairwise_text_exposes_semantic_mlp_fusion(self):
+        profile = {"data_type": "text", "torch_available": True,
+                   "text_encoder_available": True, "compute_profile": "gpu_large",
+                   "text_columns": ["headline_A", "headline_B"],
+                   "neural_batch_size": 64, "class_counts": {"a": 30, "b": 30}}
+        history = [{"candidate": {"family": "dummy"}, "status": "success", "score": .5}]
+        candidate, _ = next_candidate(profile, history, "accuracy")
+        self.assertEqual(candidate["family"], "pairwise_semantic_mlp_blend")
+        self.assertAlmostEqual(candidate["semantic_weight"] + candidate["mlp_weight"], .405)
+
     def test_invalid_gpu_options(self):
         for changes in ({"compute_profile": "wrong"}, {"neural_batch_size": 0},
                         {"mixed_precision": 1}, {"gpu_cache_fraction": 1.0}):

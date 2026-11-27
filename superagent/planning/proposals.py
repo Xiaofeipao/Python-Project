@@ -10,6 +10,13 @@ RULES = {
                          'class_weight': [None, 'balanced']},
     'pairwise_semantic_blend': {'C': (.001, 100.), 'semantic_weight': (.05, .25),
                                 'encoder': ['mpnet', 'bge', 'e5', 'gte']},
+    'pairwise_semantic_mlp_blend': {'C': (.001, 100.), 'semantic_weight': (.0, .25),
+                                    'mlp_weight': (.1, .6),
+                                    'encoder_semantic': ['mpnet', 'bge', 'e5', 'gte'],
+                                    'encoder_mlp': ['bge', 'mpnet'],
+                                    'hidden': (128, 512), 'epochs': (10, 80),
+                                    'learning_rate': (.00001, .01),
+                                    'weight_decay': (.0, .1), 'dropout': (.0, .6)},
     'pairwise_overlap_xgb': {'iterations': (100, 2000), 'depth': (3, 8),
                              'learning_rate': (.01, .1), 'reg_lambda': (1., 50.),
                              'balanced': [True, False]},
@@ -132,6 +139,8 @@ def apply_proposal(base, overrides, profile, trial_memory=None):
         raise ValueError('Combined features require ordered-text preprocessing')
     if result.get('gpu_weight', .25) + result.get('leaf_weight', 0.) > 1:
         raise ValueError('Invalid blend weights')
+    if result.get('semantic_weight', .05) + result.get('mlp_weight', .35) > 1:
+        raise ValueError('Invalid semantic/MLP blend weights')
     if 'percentile' in overrides and result.get('feature_filter')!='mutual_info':
         raise ValueError('Percentile requires mutual-information selection')
     if trial_memory is not None:

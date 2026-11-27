@@ -51,7 +51,7 @@ def allocate_candidates(candidates, profile, history):
     costly = {'minilm_logistic', 'torch_pretrained', 'frozen_image_logistic', 'torch_ensemble',
               'image_meta_blend', 'rbf_svm', 'embedding_logistic', 'embedding_mlp',
               'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost', 'transformer_finetune',
-              'pairwise_semantic_blend', 'pairwise_overlap_xgb'}
+              'pairwise_semantic_blend', 'pairwise_semantic_mlp_blend', 'pairwise_overlap_xgb'}
     eligible = [c for c in candidates if not (c['family'] in costly and remaining < 60)
                 and not (c['family'] == 'rbf_svm' and rows > 20000)]
     # Preserve established general baselines before optional feature/encoder sweeps.
@@ -66,7 +66,7 @@ def allocate_candidates(candidates, profile, history):
         # sparse linear model.
         novel = {'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost',
                  'embedding_logistic', 'embedding_mlp', 'pairwise_semantic_blend',
-                 'pairwise_overlap_xgb', 'catboost_cross'}
+                 'pairwise_semantic_mlp_blend', 'pairwise_overlap_xgb', 'catboost_cross'}
         novel_ready = len(history) >= 2 and family in novel
         return (0 if anchor or novel_ready else 1 if family == 'frozen_image_logistic'
                 else 2 if family in costly or c.get('feature_filter') else 1)
@@ -242,6 +242,16 @@ def next_candidate(profile, history, metric):
             initial.append({'family': 'pairwise_semantic_blend', 'semantic_weight': .1,
                             'C': 1., 'encoder': 'mpnet', 'batch_size':
                             profile.get('neural_batch_size', 64), 'max_length': 256})
+            # Pairwise sparse signal, a small MPNet logistic correction and a
+            # stronger BGE MLP head.  The weights come from validation-only
+            # blending of the strongest observed components, not task identity.
+            fused = {'family': 'pairwise_semantic_mlp_blend', 'semantic_weight': .055,
+                     'mlp_weight': .35, 'C': 1., 'encoder_semantic': 'mpnet',
+                     'encoder_mlp': 'bge', 'hidden': 384, 'epochs': 40,
+                     'learning_rate': .0007, 'weight_decay': .03, 'dropout': .3,
+                     'batch_size': profile.get('neural_batch_size', 64), 'max_length': 256}
+            initial.insert(0, fused)
+            initial.insert(1, dict(fused, mlp_weight=.3))
     if profile['data_type'] == 'text' and profile.get('torch_available'):
         # Trainable text stacks are independent of the TF-IDF vocabulary.  Keep
         # them after the established sparse anchors so a large candidate list
@@ -328,6 +338,7 @@ def next_candidate(profile, history, metric):
             {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': 0.},
             {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .5, 'leaf_weight': 0.},
             {'family': 'cross_boost_blend', 'gpu_seeds': 3, 'gpu_weight': .25, 'leaf_weight': .15},
+            {'family': 'cross_boost_blend', 'gpu_seeds': 4, 'gpu_weight': .3, 'leaf_weight': 0.},
         ] + [
             {'family': 'xgboost', 'iterations': count, 'depth': depth, 'learning_rate': .03,
              'reg_lambda': regularization} for count, depth, regularization in
@@ -451,6 +462,11 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, semantic_weight=value) for value in (.05, .2)]
             variants += [dict(candidate, C=value) for value in (.1, 10.)]
             variants += [dict(candidate, encoder=value) for value in ('bge', 'e5')]
+        elif family == 'pairwise_semantic_mlp_blend':
+            variants = [dict(candidate, mlp_weight=value) for value in (.25, .45)]
+            variants += [dict(candidate, semantic_weight=value) for value in (.02, .1)]
+            variants += [dict(candidate, hidden=value) for value in (256, 512)]
+            variants += [dict(candidate, epochs=candidate.get('epochs', 40) + 10)]
         elif family == 'catboost_cross':
             variants = [dict(candidate, max_ctr_complexity=value) for value in (3, 8)]
             variants += [dict(candidate, one_hot_max_size=value) for value in (8, 64)]
@@ -676,6 +692,37 @@ def _build_model(profile, candidate, config):
     if family == 'pairwise_overlap_xgb':
         from superagent.models.pairwise import overlap_xgb_classifier
         return overlap_xgb_classifier(profile['text_columns'], candidate, config)
+    if family == 'pairwise_semantic_mlp_blend':
+        from superagent.models.tabular import ProbabilityBlend
+        semantic_weight = candidate.get('semantic_weight', .05)
+        mlp_weight = candidate.get('mlp_weight', .35)
+        pair_weight = 1. - semantic_weight - mlp_weight
+        if pair_weight <= 0:
+            raise ValueError('Blend weights must leave a positive pairwise share')
+        pairwise = build_model(profile, {
+            'family': 'pairwise_overlap', 'C': candidate.get('C', 1.),
+            'fit_intercept': True,
+            'vectorizer_options': candidate.get('vectorizer_options') or {'ngram_range': [3, 6]},
+        }, config)
+        semantic = build_model(profile, {
+            'family': 'embedding_logistic', 'C': candidate.get('C', 1.),
+            'encoder': candidate.get('encoder_semantic', 'mpnet'),
+            'batch_size': candidate.get('batch_size', 64),
+            'max_length': candidate.get('max_length', 256),
+        }, config)
+        mlp = build_model(profile, {
+            'family': 'embedding_mlp', 'encoder': candidate.get('encoder_mlp', 'bge'),
+            'hidden': candidate.get('hidden', 384), 'epochs': candidate.get('epochs', 40),
+            'learning_rate': candidate.get('learning_rate', .0007),
+            'weight_decay': candidate.get('weight_decay', .03),
+            'dropout': candidate.get('dropout', .3),
+            'batch_size': candidate.get('batch_size', 64),
+            'max_length': candidate.get('max_length', 256),
+        }, config)
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', ProbabilityBlend(
+                             [pairwise, semantic, mlp],
+                             weights=[pair_weight, semantic_weight, mlp_weight]))])
     if family == 'pairwise_semantic_blend':
         from superagent.models.tabular import ProbabilityBlend
         weight = candidate.get('semantic_weight', .1)
