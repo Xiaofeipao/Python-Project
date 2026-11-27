@@ -19,7 +19,7 @@ class FrozenImageFeatures(TransformerMixin, BaseEstimator):
 
     def fit(self, X, y=None):
         import torch
-        from superagent.preprocessing.transformers import ImageFeatures
+        from superagent.preprocessing.components.image import ImageFeatures
         torch.set_num_threads(self.threads)
         # Isolate initialization from any other estimator's random stream.
         with torch.random.fork_rng(devices=[]):
@@ -116,6 +116,8 @@ class TorchClassifier(ClassifierMixin, BaseEstimator):
                 from pathlib import Path
                 from urllib.parse import urlparse
                 import torch
+                from superagent.models.cache import torch_cache_root
+                torch.hub.set_dir(str(torch_cache_root() / 'hub'))
                 # Verify the publisher hash prefix even on the initial download.
                 state = weights.get_state_dict(progress=True, check_hash=True)
                 checkpoint = Path(torch.hub.get_dir()) / 'checkpoints' / Path(urlparse(weights.url).path).name

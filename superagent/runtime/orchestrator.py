@@ -72,6 +72,10 @@ def run_worker(request, folder, timeout, threads):
     request_path = folder / "request.json"
     write_json(request_path, request)
     env = os.environ.copy()
+    # Snapshot workers share the controller's absolute pretrained caches.
+    from superagent.models.cache import text_cache_root, torch_cache_root
+    env['SUPERAGENT_MODEL_CACHE'] = str(text_cache_root())
+    env['TORCH_HOME'] = str(torch_cache_root())
     # Workers execute fits only. The one planner in this controller owns calls.
     env.pop(request['config'].get('llm_api_key_env', 'HKUST_API_KEY'), None)
     env.pop('HKUST_API_KEY', None)

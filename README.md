@@ -6,6 +6,7 @@ One system selects classification methods using training data, resources and val
 
 - [Documentation index](docs/README.md) and [architecture](docs/architecture.md)
 - [Reproducible environment and pinned pretrained weights](docs/guides/reproducible_environment.md)
+- [Download all pretrained resources and find their local paths](docs/guides/model_cache.md)
 - [Current accounting policy](docs/accounting/policy.md), [retained records](docs/accounting/README.md) and [model pointers](docs/development/current_results.json)
 - [Commands for running SuperAgent](docs/guides/quickstart.md)
 - [Review of every proposed improvement](docs/development/recommendation_review.md)
@@ -24,6 +25,19 @@ python main.py doctor
 ```
 
 Optional GPU, XGBoost and MiniLM dependencies are in requirements-gpu.txt. Choose a compatible PyTorch build. `device: "auto"` supports CPU fallback. MiniLM is an optional frozen feature extractor, disabled by default; it does not replace the Qwen/DeepSeek planner.
+
+Prepare every registered pretrained model and tokenizer before an unattended run:
+
+```bash
+python scripts/setup/download_models.py
+python scripts/setup/download_models.py --offline
+```
+
+Default local paths are `.pretrained_cache/text/` for the seven pinned encoders
+and `.pretrained_cache/torch/hub/checkpoints/` for ResNet-18/34 ImageNet weights.
+The ignored `.pretrained_cache/manifest.json` records absolute paths, revisions,
+SHA256 values and preparation status. Workers share the same resolved cache.
+Weights are not pushed to GitHub; prepare them after cloning or copy the cache.
 
 Training CSV files include the target column. Relative paths are resolved against the configuration directory. Follow the task announcement for modality, columns, IDs and metric. Examples are under configs/; final_policy.json is a proposed shared algorithm policy. It does not freeze the current checkout.
 
@@ -62,6 +76,15 @@ python scripts/validation/check_frozen_workflow.py --help
 
 Implementation is grouped by responsibility. Compatibility modules directly under superagent/ preserve historical pickle imports. Model serialization, verified fallback and resume bindings share runtime/checkpoint.py.
 
+For code navigation, follow [the directory map](docs/architecture.md):
+`planning/search/` proposes and allocates experiments; `models/factory.py`
+constructs the chosen pipeline; `preprocessing/components/` contains reusable
+feature transformations; and `models/text/` groups text encoders, trainable
+networks, fine-tuning and pairwise classifiers. Previous module paths remain
+compatibility facades. Data paths, algorithm settings and retained evidence are
+unchanged. Existing frozen bundles and interrupted runs still require their
+original source snapshot.
+
 ## Results and submission boundaries
 
 See [requirements status](docs/guides/requirements_status.md) for implemented safeguards and unresolved submission evidence. Passing tests is not a certification of course compliance. This checkout remains unfrozen; the figures below are development results from the recorded runs, not a frozen formal submission.
@@ -70,6 +93,6 @@ The current off-peak development pair reaches 79.15% Coupon accuracy (`coupon-re
 
 See docs/accounting/ledger_inventory.json for the retained ledger sources and their hashes. Selected-run costs are already included and must not be added again.
 
-The reported models have different frozen runtime hashes. They form a development frontier, not a single-version formal experiment. Deployment revision eligibility remains separate from accounting arithmetic. The published report describes an earlier frozen experiment and remains a draft; do not attribute later features or current frontier scores to it. Members must confirm AI_USAGE.md.
+The reported models have different frozen runtime hashes. They form a development frontier, not a single-version formal experiment. Deployment revision eligibility remains separate from accounting arithmetic. The published report documents pushed commit `c835a0d` and intentionally leaves accuracy fields blank; do not attribute later local refactoring or historical frontier scores to that report. Members must confirm AI_USAGE.md.
 
 Only docs/report/report.pdf and its LaTeX sources are published as report material. Other PDFs, presentations, pre/, datasets, credentials, runs and local submission bundles are ignored. Official source evidence is stored as lossless Base64 archives with English metadata; decoded original bytes retain their registered hashes.

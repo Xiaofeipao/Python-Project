@@ -6,7 +6,7 @@ from joblib import Memory
 from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, clone
 from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
 
-from superagent.preprocessing.transformers import FrameSchema
+from superagent.preprocessing.components.tabular import FrameSchema
 
 
 class NativeCategories(FrameSchema):

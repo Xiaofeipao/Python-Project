@@ -1,20 +1,15 @@
-# Report Manuscript
+# Single-Column Project Report
 
-This manuscript describes its recorded historical experiments. The current
-checkout is unfrozen and has since changed. The source, features, planner guards
-and refit fallback now present must not be attributed to those older results.
-See ../guides/requirements_status.md for the evidence needed before submission.
+The English manuscript documents GitHub commit `c835a0d4318d5d37fc83f380d299a8ee36ad7e00`, verified against `origin/main` on 2026-11-27. It uses an A4 single-column research-paper layout, rather than a journal-branded template.
 
-- report.pdf: the only published report PDF.
-- latex/report.tex: editable English manuscript.
-- latex/IEEEtran.cls: document class with its original license header.
-- latex/figures/: report figures.
-- latex/BUILD.md: build commands.
+- `report.pdf`: canonical compiled report (9 pages).
+- `latex/report.tex`: editable manuscript and inline workflow figure.
+- `latex/BUILD.md`: compilation instructions.
 
-The manuscript was updated on 2026-11-24 and describes the current code. Its primary same-runtime pair is coupon-v6-20261124 / headlines-v6-20261124 (78.8727% / 69.7092%). The report generator verifies both fingerprints against the repository runtime. The higher cross-version Coupon development result is explicitly separate from the primary evaluation.
+The report covers scope, single-agent architecture, feedback-guided planning, general tabular/text/image methods, reliability, final-only test access, resource/accounting policy, evaluation protocol, reproducibility and limitations. Accuracy and completed-trial fields are intentionally blank. Names, student IDs and individual contributions require confirmation. No new training, inference or planner API calls were performed for this revision; existing accounting records were not changed.
 
-The five-page English IEEE-style report covers architecture, autonomy, data, complete primary trial tables, current results, costs, recovery, reproducibility, limitations and submission readiness. The supplied requirements mandate report.pdf and content coverage, but do not specify a page limit, font or citation style. All current accounting records are summarized: 15 ledgers, 133 calls, CNY 1.319903. The primary pair costs CNY 0.097397; selected-run costs are not added to the inventory again.
+Historical generated tables and plots are not imported by this manuscript. Do not run the historical data updater to fill this report automatically: final values must match complete autonomous runs of the same submitted version, policy, model artifacts and logs. Blank results make this an unfinished empirical draft, not a complete final submission.
 
-Authorship, deployment eligibility, test reuse and post-hoc cross-run comparisons remain explicit limitations. The document is still a development report, not proof of completed formal compliance. No models, logs or ledger entries were changed, and no training/API calls were made to update it. Previous manuscript/PDF copies are retained locally under runs/report_backup_20261124/.
+Previous manuscript/PDF copies are retained locally in `runs/report_backup_20261127/`. Compile twice inside `latex/` and copy the resulting PDF to this directory. Only this canonical report PDF is published; intermediate files and duplicate PDFs are ignored.
 
-Compile inside latex/ and copy the result to this directory as report.pdf. Intermediate files and duplicate PDFs are ignored. Presentations and pre/ are not published.
+References identify model/algorithm papers, official pretrained model cards and software sources; course handouts and this project repository are not bibliography entries. Paragraphs after headings are flush left, while subsequent normal paragraphs use a 1.5 em first-line indent and no added paragraph gap.

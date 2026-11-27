@@ -29,6 +29,9 @@ class SingleAgentContract(unittest.TestCase):
                 environment = launch.call_args.kwargs['env']
                 self.assertNotIn('CUSTOM_KEY', environment)
                 self.assertNotIn('HKUST_API_KEY', environment)
+                from superagent.models.cache import text_cache_root, torch_cache_root
+                self.assertEqual(environment['SUPERAGENT_MODEL_CACHE'], str(text_cache_root()))
+                self.assertEqual(environment['TORCH_HOME'], str(torch_cache_root()))
                 self.assertEqual(os.environ['CUSTOM_KEY'], 'synthetic-secret')
 
     def test_test_guard_blocks_path_and_file_identity_alias_until_released(self):

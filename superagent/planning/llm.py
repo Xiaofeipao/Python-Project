@@ -13,7 +13,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from urllib.error import URLError, HTTPError
 
 from superagent.common.json_io import append_json, event, write_json
-from superagent.planning.search_space import candidate_key, next_candidate
+from superagent.planning.search import candidate_key, next_candidate
 from superagent.planning.proposals import RULES, apply_proposal
 from superagent.planning.memory import family_stats, state, trial_key
 from superagent.evaluation.metrics import utility

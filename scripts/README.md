@@ -16,3 +16,7 @@ separate operations. Reporting and final evaluation scripts read results only;
 their test scores must not guide subsequent model selection.
 
 Probes may incur API charges. Reconciliation is read-only by default and requires explicit evidence for changes. None of these scripts should be run merely to browse the accounting inventory or experiment catalog.
+
+`setup/download_models.py` prepares all pinned text snapshots/tokenizers and
+ImageNet weights, or checks local resources with `--offline`. It does not train
+or invoke the planner API. See `docs/guides/model_cache.md` for paths and copying.

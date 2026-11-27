@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.metrics import classification_report
 
 from superagent.preprocessing.datasets import file_hash, labels, read_csv
-from superagent.preprocessing.transformers import ImageFeatures
+from superagent.preprocessing.components.image import ImageFeatures
 from superagent.common.json_io import write_json
 from superagent.evaluation.metrics import score_model
 from superagent.governance.frozen_bundle import check_solution_stage

@@ -48,7 +48,7 @@ def main():
         from superagent.preprocessing.datasets import labels
         from superagent.common.json_io import write_json
         from superagent.evaluation.metrics import score_model
-        from superagent.planning.search_space import build_model
+        from superagent.models.factory import build_model
         from superagent.runtime.checkpoint import save_solution
 
         config = TaskConfig(**request["config"])

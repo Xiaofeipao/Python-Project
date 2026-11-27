@@ -54,3 +54,11 @@ python -X utf8 -m unittest discover -s tests/models -p "test_*.py"
 Test access is blocked in the controller and training workers throughout search
 and refitting. progressive_output records checkpoints only. Final prediction or
 evaluation starts after selection_completed. No test statistic chooses a model.
+
+## Prepare model resources
+
+Before an unattended pretrained-model run, prepare the pinned weights and
+tokenizers using the [model cache guide](model_cache.md). The default directories
+are `.pretrained_cache/text/` and `.pretrained_cache/torch/` inside the checkout.
+The local manifest lists exact paths, revisions, sizes and hashes. Cache files
+are ignored by Git; a new machine must prepare or copy them separately.

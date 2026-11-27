@@ -6,7 +6,7 @@ from superagent.evaluation.metrics import score_model, utility
 
 
 def nested_diagnostic(train, profile, candidate, config):
-    from superagent.planning.search_space import build_model
+    from superagent.models.factory import build_model
     from superagent.preprocessing.datasets import labels
     if 'C' not in candidate or candidate['family'] not in {'logistic','linear_svm'}:
         return {'status':'skipped', 'reason':'No bounded regularization selection for this family'}

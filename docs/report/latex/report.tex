@@ -1,153 +1,220 @@
-\documentclass[journal]{IEEEtran}
+\documentclass[11pt,a4paper]{article}
 \usepackage[T1]{fontenc}
-\usepackage{amsmath,amssymb,graphicx,booktabs,array,url}
+\usepackage{mathptmx,amsmath,amssymb,graphicx,booktabs,array,tabularx}
+\usepackage[margin=25mm]{geometry}
+\usepackage{microtype,fancyhdr,enumitem,titlesec}
+\DisableLigatures{encoding = *, family = tt*}
 \usepackage[hidelinks]{hyperref}
-\graphicspath{{figures/}}
-\input{generated.tex}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.7em}{}
+\setlength{\parindent}{1.5em}
+\setlength{\parskip}{0pt}\linespread{1.08}
+\setlist{nosep,leftmargin=1.5em}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\small General Classification SuperAgent}\fancyhead[R]{\small AIAA 3102}
+\fancyfoot[C]{\small\thepage}\setlength{\headheight}{14pt}
+\newcommand{\resultblank}{\rule{15mm}{0.35pt}}
+\newcommand{\code}[1]{\texttt{\small #1}}
+\title{\textbf{A General Classification SuperAgent with\newline Feedback-Guided Search and Auditable Execution}}
+\author{Project Team\thanks{Member names, student IDs, section and individual contributions require confirmation.}}
+\date{27 November 2026}
 \begin{document}
-\title{A Feedback-Guided Classification SuperAgent: Current Architecture, Reproducible Experiments, and Token Accounting}
-\author{Project Team: Names, Student IDs and Section Pending Confirmation\thanks{AIAA 3102 course project. Updated November 24, 2026. Development report; IEEE-style layout is an editorial choice, not a claim of publication or completed formal eligibility.}}
-\markboth{AIAA 3102 Project Report --- November 24, 2026}{General Classification SuperAgent}
 \maketitle
+\begin{center}\small Implementation examined: pushed commit \code{c835a0d}.\\Single-column research manuscript; empirical accuracy fields intentionally left blank.\end{center}
 \begin{abstract}
-We describe a general classification SuperAgent with bounded language-model planning, validation feedback, isolated model fitting, reproducible source snapshots and persistent token accounting. The current runtime handles tabular, text and image inputs without dataset-name dispatch. Our primary experiments use the same runtime fingerprint as the current repository and complete twelve trials per released task. Coupon accuracy is 78.8727\% (2001/2537), and Headlines accuracy is 69.7092\% (2253/3232). Their recorded planning costs are CNY 0.069836 and CNY 0.027561. The complete current ledger inventory contains fifteen evaluations and 133 calls, totaling CNY 1.319903 with no missing-cost record or unresolved reservation in that source set. We separate these same-version results from a higher Coupon development result obtained with an older runtime. We document word-boundary character differences, optional word features, training-only nested diagnostics, recovery safeguards, failed proposals and local fallback. Released-test reuse, post-hoc cross-run comparison, unverified deployment revisions and missing authorship confirmation prevent treating this report as proof of an unbiased, fully finalized submission.
+Developing a classifier for an unseen task requires coordinated choices about representation, algorithms, validation and resources. We describe a general classification SuperAgent with one planning controller and isolated fitting workers. The same implementation handles tabular, text, image and selected mixed inputs without dispatching on dataset identity. Generic initial experiments precede feedback-guided exploration. When enabled, a Qwen/DeepSeek planner proposes supported methods and bounded parameter changes, while the runtime validates novelty, parameter ranges and computational feasibility. Validation guides model selection; designated test inputs remain outside search. Candidates include boosting, sparse text methods, frozen encoders, trainable text networks, optional Transformer fine-tuning and image transfer learning. Checkpoints, source/environment records and stage-aware token accounting support unattended operation. This manuscript documents the pushed implementation and its evaluation protocol. Accuracy fields remain unfilled, and no new experiment, API call or performance improvement is claimed.
 \end{abstract}
-\begin{IEEEkeywords}Autonomous experimentation, classification, validation, reproducibility, token accounting.\end{IEEEkeywords}
+\noindent\textbf{Keywords:} autonomous experimentation; classification; validation; transfer learning; reproducibility.
 
-\section{Requirements and Reporting Scope}
-The supplied assignment requires a PDF describing system design, main experiments, results and limitations, alongside source, a unified entry point, dependencies, models/results, execution logs and an AI declaration~\cite{assignment}. The grading rubric assigns two points to report quality and two to execution/reproducibility within forty project points~\cite{rubric}. Neither supplied document prescribes a page limit, font, citation style or mandatory conference template. We retain the existing IEEE two-column layout for readability. These are the requirements available in this workspace; later course announcements must still be checked.
+\section{Introduction}
+A general algorithm-development system must adapt its approach to unfamiliar data rather than execute a manually chosen classifier. Categorical records, ordered text pairs and images have different useful representations, while class imbalance, dataset size and available hardware affect which experiments are practical. The course project asks for autonomous task analysis, experimentation, feedback-driven refinement and final model selection.
 
-The assignment requires reported solutions to use one final submitted version, forbids task-identity-based prepared solutions, restricts planner models to eligible Qwen/DeepSeek releases by October 21, 2026, and sets a CNY 20 model-usage budget per evaluation task. Test data is final-only. The unseen task uses the frozen submitted version within twenty-four hours of its official release, with no additional report required.
+Our system organizes these steps in a shared execution loop. Its contributions are a reusable multimodal candidate interface, bounded language-model planning grounded in observed validation feedback, and an auditable runtime that separates search from final evaluation. These architectural capabilities do not imply that every candidate is beneficial or that language-model planning has already demonstrated a causal accuracy advantage.
 
-We therefore make the \emph{same-version November 24 pair} the primary experiment. Both source snapshots have fingerprint \texttt{0dead41e\ldots e534e}, which the report generator also verifies against the current repository runtime. Exact fingerprints, source input hashes and full candidate records are retained in \texttt{report\_data.json} and the original run directories. No training or API calls were performed to update this manuscript.
+\section{Version and Reporting Scope}
+The implementation reference is commit \code{c835a0d4318d5d37fc83f380d299a8ee36ad7e00} of the project repository. The GitHub branch was checked when preparing this manuscript. Local unpushed changes and historical best-model scores are not evidence of this revision's performance.
 
-A separate development frontier retains Coupon 79.1486\% from \texttt{coupon-minilm2-20261123} and Headlines 69.7092\% from \texttt{headlines-v6-20261124}. Those models have different runtime hashes and were retained after cross-run inspection of observed test performance. They are \emph{not} represented as a single-version autonomous evaluation. This report does not change or replace either saved model.
+The supplied requirements call for a PDF describing system design, main experiments, results and limitations, with matching code, prediction solutions and execution logs. No specific journal template or page limit is prescribed. We use a single-column research layout without claiming publication in a named journal. All eventual reported results must come from complete autonomous runs of one final submitted version. Numerical accuracy fields in this draft are deliberately blank; author information and empirical evidence still require completion.
 
-\section{System Architecture}
-\subsection{Layers and Execution}
-The unified entry point is \texttt{main.py}. Configuration validation lives in \texttt{superagent/config.py}. Runtime orchestration, isolated workers and checkpoint recovery occupy \texttt{runtime/}; candidate construction, LLM communication, proposal validation and trial memory occupy \texttt{planning/}. Data transformations and selectors live in \texttt{preprocessing/}; classifiers in \texttt{models/}; metrics, inference and nested diagnostics in \texttt{evaluation/}. The \texttt{governance/} layer owns accounting, frozen-bundle verification and configured test-file access. This separation keeps financial state outside model-selection code.
+The scope is binary and multiclass classification. Supported objectives are accuracy, balanced accuracy, macro-F1, weighted-F1, ROC-AUC and log loss. CSV is the primary interface; image records contain paths, and separate adapters convert supplied NumPy arrays while preserving partitions. This is not a universal parser for arbitrary data formats.
 
-Execution inspects training/validation data, establishes a class-prior baseline, builds a bounded candidate menu, runs a worker, evaluates validation performance and records feedback. Search ends at its trial, cost or time limit, on eligible-space exhaustion, or optional patience. The best permitted validation solution is refitted on training plus validation before final test inference. The reported runs enable MiniLM and feature-search capabilities and use three-seed validation; availability does not imply that a capability wins.
+\section{Single-Agent Architecture}
+\subsection{Responsibilities and execution flow}
+The unified entry point is \code{main.py}. Configuration validation belongs to \code{config.py}; orchestration, workers and checkpoints occupy \code{runtime/}. Candidate construction, proposals, LLM communication and memory occupy \code{planning/}. Preprocessing, classifiers, evaluation and governance are separate packages.
 
-\subsection{Bounded Autonomy}
-Planner context excludes task names, dataset paths, raw text, feature/label names and test scores. It includes modality statistics, recent five trials, the current best candidate, family summaries and the executable menu. Structured outputs contain a choice, diagnosis and next action; nonempty overrides require a hypothesis and success criterion. Overrides cannot change families, metrics, paths, code or resource policy. Feature settings and classifier hyperparameters cannot be changed together in one proposal. Multiple fields within a category remain possible, so this is not always a strict one-parameter causal experiment.
+One \code{AutonomousPlanner} owns decisions and model API calls in each run. Workers execute specified experiments and do not inherit the planner API credential. Ensemble members, calibration folds and training seeds are estimators or evaluation procedures, not additional agents. Batch tasks execute serially through the same program and shared algorithm policy.
 
-Canonical candidate hashes prevent exact repeated configurations within a run. Family state records success/failure counts, best/mean utility, dispersion across configurations and elapsed time. Retirement and exploration are heuristics, not optimal scheduling or statistical tests. Family dispersion must not be confused with repeated-seed dispersion.
+\begin{figure}[ht]
+\centering\setlength{\unitlength}{1mm}
+\begin{picture}(154,40)
+\put(0,24){\framebox(34,12){\shortstack{Inspect train\\and validation}}}
+\put(40,24){\framebox(34,12){\shortstack{Propose and\\check candidate}}}
+\put(80,24){\framebox(34,12){\shortstack{Fit and score\\validation}}}
+\put(120,24){\framebox(34,12){\shortstack{Select and\\finalize model}}}
+\put(34,30){\vector(1,0){6}}\put(74,30){\vector(1,0){6}}\put(114,30){\vector(1,0){6}}
+\put(97,24){\line(0,-1){12}}\put(97,12){\line(-1,0){40}}\put(57,12){\vector(0,1){12}}
+\put(61,4){\makebox(33,5){\small Validation feedback}}
+\put(120,0){\framebox(34,12){\shortstack{Final test\\prediction}}}\put(137,24){\vector(0,-1){12}}
+\end{picture}
+\caption{One shared development loop. Final test prediction has no feedback edge into search.}
+\end{figure}
 
-\subsection{LLM Response Reliability and Fallback}
-The planner uses a 4096-token output allowance. It rejects empty/non-text messages, malformed JSON, non-object results, out-of-range choices, invalid parameters and repeats. A provider \texttt{finish\_reason=length} is rejected even if the visible content parses. Returned usage is logged before proposal validation: an invalid plan is still a charged request. No missing diagnosis is fabricated and no partial JSON is silently repaired.
+\subsection{Data inspection and initial methods}
+Inspection validates labels, IDs and feature availability and records modality evidence, class distribution, missingness and categorical cardinality. Explicit input columns take precedence over automatic inference from content statistics and image extensions. Official validation splits are preserved. Otherwise stratified holdout is attempted; tiny or singleton classes receive conservative handling and warnings about incomplete validation coverage.
 
-Repeated invalid plans disable further API planning for that run; local validation-driven search continues with an explicit event. This bounds wasted calls but limits LLM influence. Two format examples and bounded context support concise replies; they do not establish a causal accuracy benefit. Table~\ref{tab:calls} reports actual primary-run decisions instead of equating HTTP success with autonomous planning.
+The first experiment is a class-prior baseline. A deterministic generic anchor then supplies an initial reference chosen from modality or input shape. For instance, two ordered text columns can use signed differences and overlap features. Task names do not invoke prepared winners. The supplied instructor clarification permits preset general baselines; later experimentation and final selection must still proceed without human intervention.
 
-\section{Data and Methods}
-\begin{table}[t]\centering\caption{Supplied data partitions, preserved throughout search.}\label{tab:data}
-\begin{tabular}{lrrr}\toprule Task&Train&Validation&Test\\\midrule Coupon&8117&2030&2537\\ Headlines&8301&940&3232\\\bottomrule\end{tabular}\end{table}
-Both released tasks specify accuracy. Additional F1 scores are descriptive. Coupon contains twenty-one categorical input fields. Conversion from the supplied NumPy arrays preserves row order and original partitions. Text inputs retain their column identities. Optional IDs are excluded from predictor features.
+\section{Feedback-Guided Planning}
+When enabled, the language-model planner receives aggregate data properties, the recent five experiments, the best previous candidate, family statistics and an executable menu. Raw examples, task identity, file paths, feature/label names and test scores are excluded. A structured reply supplies a choice, diagnosis and next action; nonempty parameter changes also require a hypothesis and success criterion.
 
-\subsection{Tabular Candidates}
-The search space includes linear models, traditional trees, CatBoost, LightGBM, supported neural candidates, GPU XGBoost and probability blends. The selected current-version Coupon model is a cross-boost blend with three members per boosting family, XGBoost group weight 0.55, CatBoost weight 0.45 and no leaf-model contribution. The individual randomized members and weights belong to the candidate, not manually selected test outcomes. Numeric and categorical preprocessing fit the training portion only. Family-member caching avoids redundant fitting where inputs and parameters match.
+The runtime rejects malformed or truncated replies, invalid choices, unsupported parameters and duplicates. Proposals change feature settings or classifier hyperparameters, rather than both categories together. Multiple fields within one category can change, so this is not always a one-parameter causal experiment. The system selects and modifies implemented components instead of executing unrestricted generated code.
 
-\subsection{Ordered Text Features}
-Generic two-column text candidates compare separate representations and signed differences. The new pairwise candidate uses a shared \texttt{char\_wb} TF--IDF vocabulary with character 3--6 grams, minimum document frequency two, sublinear term frequency and a bounded feature count. Given shared vocabulary map $\phi$ and simple surface statistics $s$, the feature vector is
-\begin{equation}
-x(A,B)=[\phi(A)-\phi(B),\ s(A)-s(B)].
-\end{equation}
-Logistic regression uses $C=1$, no intercept, the lbfgs solver and the existing iteration cap. Consequently the linear decision score changes sign when the input order is swapped; ties and label interpretation still require care. This is a generic input-shape candidate, not dispatch by a task or column name.
+After repeated invalid plans, one shorter repair request may be attempted before local search continues. Suggested plans, accepted actions, failures and local fallbacks are logged separately. Local fallback must not be represented as an LLM decision.
 
-An optional word unigram/bigram difference branch, capped at 15,000 features, joins the character features through the existing FeatureUnion. Shared fitting avoids duplicate pipelines and preserves signed differences. The primary Headlines run selects the \emph{plain character} candidate at trial eight, not the added-word variant. Its plain candidate reaches 70.0000\% validation; the word-augmented trial reaches 69.6809\%. The earlier share package's 70\% claim was validation accuracy, not an independent test result; its saved model was not imported.
+Candidate hashes retain model-family/parameter combinations already tried. Family summaries track scores, variability, failures and elapsed time. Repeated failures or weak performance can retire a family within the current run. Early exploration favors family coverage, while generic anchors and selected new text families receive explicit priorities. Runtime estimates constrain later candidates. Search ends at trial/time limits, exhaustion or configured stopping conditions. Twenty-four trials is an upper bound per task, not a guarantee of completion or optimality. One trial can contain several fits and need not equal one API call.
 
-\subsection{Optional Features and Diagnostics}
-Imputation, one-hot/ordinal encoding, n-gram ranges, IDF, binary features, stopwords and selection settings are bounded proposal components. Variance and mutual-information filters fit training only; dense MI conversion has a 128 MiB limit. Text MI candidates may use training-fitted SVD first. Frozen MiniLM features use a pinned repository revision with remote code execution disabled. These candidates coexist with the original methods and do not guarantee improvement.
+\section{General Modeling Capabilities}
+\subsection{Tabular and mixed inputs}
+Numeric columns support imputation and scaling. Categorical processing includes one-hot, ordinal, frequency and native representations, with bounded high-cardinality alternatives. Date expansion supplies calendar features and a training-fitted reference. Optional variance and mutual-information selection reduce feature sets under memory limits.
 
-Repeated training seeds produce mean and standard deviation on the \emph{same} official validation split. Final fitting uses the configured base seed, rather than choosing the best seed or automatically averaging refits. These standard deviations are descriptive, not confidence intervals or split uncertainty; ensemble seeds can overlap. Optional nested diagnostics perform inner selection between two regularization values and outer stratified evaluation on a bounded training subsample. They do not evaluate the complete AutoML search, and their smaller-sample scores do not replace official validation.
+Candidates include regularized linear classifiers, random forests~\cite{rf}, Extra Trees~\cite{extratrees}, CatBoost~\cite{catboost}, LightGBM~\cite{lightgbm}, XGBoost~\cite{xgboost}, neural models and probability blends. Additional categorical-interaction settings and multi-seed boosting blends extend the tabular space. Text/tabular unions retain numerical and categorical attributes alongside textual representations; image/metadata blends provide another mixed-input path. These are generic components, not proof that each combination improves a particular task.
 
-\section{Primary Same-Version Experiments}
-The primary runs are \texttt{coupon-v6-20261124} and \texttt{headlines-v6-20261124}. Both complete twelve trials under the same runtime, Flash planner, feature/MiniLM availability and three-seed validation scheme. The designated metric and supplied partitions remain fixed. Test conversion, inference and scoring follow within-run selection/refitting.
+\subsection{Sparse and pairwise text}
+Word, character and word-boundary character TF-IDF support linear classifiers and other heads using scikit-learn components~\cite{sklearn}. Multiple columns can remain separate. For exactly two ordered texts, a signed representation is
+\begin{equation}z_{\mathrm{diff}}=\phi(A)-\phi(B),\end{equation}
+where $\phi$ is fitted on training data. The sign preserves order. Overlap statistics describe lexical, numeric, capitalized-token, negation and length relationships; their scaling is training-fitted. Separate-column and blend alternatives remain available because signed differences need not suit every two-column problem.
 
-\begin{table*}[t]\centering\caption{Primary results from the same current frozen runtime. Validation values are selected seed means; test values evaluate the final refit.}\label{tab:results}\PrimaryResults\end{table*}
+The pushed revision also includes pairwise overlap with a boosted-tree head and pairwise semantic fusion. The latest fusion candidate combines sparse/overlap, frozen semantic classification and semantic MLP branches with bounded probability weights. Their presence establishes available mechanisms, not measured gains. Candidate selection still uses validation.
 
-\begin{figure*}[t]\centering\includegraphics[width=.97\textwidth]{current_validation.png}\caption{Existing primary-run validation trajectories. Axes are zoomed; the prior baseline is omitted from the plotted range and retained in the appendix. Error bars show training-seed SD on the same validation split, not confidence intervals. Retained maxima cannot decrease by construction. These are not independent budget-ablation experiments.}\label{fig:validation}\end{figure*}
+\subsection{Pretrained and trainable text models}
+A small explicit registry pins general encoders to repository revisions. It includes MiniLM variants~\cite{minilm}, MPNet~\cite{mpnet}, BGE~\cite{bge}, E5~\cite{e5}, GTE~\cite{gte} and ModernBERT~\cite{modernbert}, with logistic or neural heads where supported. These citations identify the actual pretrained checkpoints rather than merely their architectural families. Backend-specific tokenization, prefixes and pooling are part of the feature pipeline. These are downstream classification models, distinct from the Qwen/DeepSeek planning LLM.
 
-\subsection{Performance and Interpretation}
-Table~\ref{tab:results} gives 78.8727\% Coupon accuracy and 69.7092\% Headlines accuracy. Neither is asserted to be a leaderboard percentile; the performance rubric ranks groups independently per task. The unseen task has no measured result here. Dataset size and the small validation set constrain interpretation of marginal gains.
+Trainable text candidates include a fastText-style EmbeddingBag~\cite{fasttext}, TextCNN~\cite{textcnn} and a bidirectional GRU~\cite{gru}. These references identify the underlying methods; the project's implementations and combinations are not claims of exact paper reproduction. Their vocabulary is learned only from fitting data. The fastText-style implementation is not a claim to use the official fastText executable or pretrained weights. Some networks join columns, while pairwise methods preserve explicit interactions.
 
-The development-frontier Coupon result of 79.1486\% is two additional correct test rows over 79.0698\% in an earlier reference run. Such a small change does not establish a statistically reliable improvement. Its group weight and runtime differ from the current Coupon rerun. We retain the higher artifact for development comparison but do not substitute it into the same-version table.
+Transformer sequence-classification fine-tuning uses the Hugging Face Transformers library~\cite{transformers} and is an optional expensive family exposed under dependency/resource conditions. Prediction reconstructs model/tokenizer resources and loads the saved fitted state. Consequently, portability can depend on complete local snapshots and compatible packages; a single serialized object is not a universal guarantee of fully offline Transformer deployment.
 
-The current Headlines refit improves on an earlier 66.0582\% reference, but model features, planning trajectory and runtime changed together. No matched causal ablation separates the contribution of the LLM, word-boundary characters, regularization or search allocation. The unselected word branch cannot be credited with the selected model's test score. Validation/test gaps alone do not prove leakage.
+\subsection{Image transfer and augmentation}
+Image candidates include resized-pixel/histogram features, convolutional and residual networks, and pretrained ResNet methods~\cite{resnet}. A frozen ResNet encoder streams batches and trains a classification head, reducing optimization work and enabling CPU execution. End-to-end fine-tuning updates network parameters and generally needs more resources.
 
-\subsection{What the Planner Actually Did}
-\begin{table}[t]\centering\caption{Actual requests with usage and accepted plans in the primary runs. Invalid replies retain their costs.}\label{tab:calls}\small\CallResults\end{table}
-Coupon accepts ten of eleven calls and rejects one plan. Headlines accepts two of five calls and rejects three plans, including unsupported tuning proposals. After rejected plans and the cutoff, several experiments execute through local fallback. Those decisions are not described as LLM-generated. The logs separate suggested plans, executed candidates and observed validation outcomes; no reasoning is retrospectively invented.
+Explicit ImageNet weight enums replace floating defaults, following the Torchvision model interface~\cite{torchvision}. Loading checks the publisher hash prefix and records the cached file's full SHA256 and source URL. Saved fitted image models reconstruct their architecture without intentionally downloading new weights. Failures are recorded, and simpler candidates remain available. Augmentation on/off alternatives avoid assuming that horizontal flips preserve labels for every task.
 
-Search-effort and seed studies in the current catalog illustrate diminishing returns, not a law that more trials improve test performance. MiniLM availability and final-fit averaging did not consistently beat n-gram or boosting candidates. The retained implementation therefore does not assume expensive methods are superior.
+\subsection{Objective-specific decisions}
+Binary F1/balanced-accuracy tasks can compare fixed thresholds on validation. For positive-class probability $p(x)$,
+\begin{equation}\widehat y(x)=\begin{cases}y_+,&p(x)\geq t,\\ y_-,&p(x)<t.\end{cases}\end{equation}
+The selected $t$ stays fixed during final refitting and test prediction. Probability objectives can compare sigmoid calibration. The complete pipeline is fitted inside calibration folds, including preprocessing. Insufficient fitting-class counts exclude unsupported calibration procedures. These variants are not automatically introduced for accuracy objectives and do not guarantee improvement.
 
-\section{Token Accounting and Resource Compliance}
-For call $i$, registered-rate cost is
-\begin{equation}
-K_i=\frac{r_{\mathrm{in}}n_{\mathrm{in},i}+r_{\mathrm{out}}n_{\mathrm{out},i}}{10^6}.
-\end{equation}
-The project uses the user-selected off-peak accounting convention: Flash CNY 1/4 and Pro CNY 4.5/13.5 per million input/output tokens, with all inputs priced at cache miss and no cache discount or free-credit offset. Earlier standard/peak development ledgers are retained as historical records and are not the final off-peak evidence. These are calculated token costs, not provider invoices. The exact deployed revision must be confirmed. Original publisher evidence is stored in lossless Base64 archives; decoded bytes retain their registered SHA-256 values.
+\section{Execution and Reliability}
+\subsection{Validation and final selection}
+Each candidate is trained in an isolated worker with bounded threads and timeout. Optional seed repeats produce validation means and descriptive standard deviations on the same split; small-validation heuristics can enable extra repeats. Bounded training-only nested diagnostics provide additional information but do not evaluate the full AutoML search or replace official validation.
 
-The complete current inventory enumerates fifteen ledger files and 133 calls, totaling CNY 1.319903. All included calls have recorded costs; missing-cost records and unresolved reservations are zero in that record set. The primary Coupon and Headlines runs cost CNY 0.069836 and CNY 0.027561, respectively, totaling CNY 0.097397. The cross-version development-frontier pair costs CNY 0.087233. Both pairs are subsets of the inventory and must not be added to its total again. Table~\ref{tab:ledgers} lists every current ledger.
+The controller uses the correct objective direction:
+\begin{equation}u(s)=\begin{cases}-s,&\text{log loss},\\s,&\text{other supported metrics}.\end{cases}\end{equation}
+Successful trials are ranked by $u(s)$. When repeats are enabled, selection uses the mean rather than the best single seed. Seed variation is not split uncertainty or a generalization confidence interval.
 
-Run IDs, task IDs, raw requests/responses and usage snapshots remain distinct. Per-run snapshots are views of recorded calls, not additional charges. The CNY 20 requirement applies to each announced task; a run-specific ID or a catalog subtotal alone does not certify correct formal task-wide mapping. Future unknown usage must remain unknown with its conservative reservation. No accounting record was rewritten for this report.
+Search reserves final-fit time and limits early refit attempts to leave opportunities for later candidates. Normally the chosen procedure is refitted on train plus validation. Where available, train-only stopping information determines refit epochs without test feedback.
 
-The planner checks known costs, outstanding reservations and the next worst-case reservation before calling. Wall-clock search allocation preserves final-fit time, and isolated workers enforce trial deadlines. Device auto-selection supports CPU fallback; out-of-memory recovery reduces batch size or switches devices when supported. GPU availability does not mean every selected estimator runs on GPU. No personal hardware model is required to explain these results.
+\subsection{Checkpoints and recovery}
+Successful trials save validated checkpoints. If final fitting fails or its allocation expires, a checkpoint can provide a partial solution after hash/source verification. Its metadata records a training-split-only fit scope, and the summary sets \code{partial=true} and \code{final\_refit\_succeeded=false}. A train-only fallback is not presented as successful full-data refitting.
 
-\section{Reproducibility, Recovery and Isolation}
-The frozen source, input hashes, configuration, environment, trial memory and ledger pointers bind a run. Environment evidence records Python, main libraries and installed distributions. Historical pickle import wrappers preserve prediction compatibility while implementation modules remain organized by responsibility.
+Restart checks bind the original request, derived effective configuration, source, data, environment and original scoped ledger. Configuration is copied before adaptive changes, enabling fresh-process recovery without modifying the caller's request. Downtime counts against the original allowance. Completed runs cannot be resumed as unfinished searches. Explicit freezing and the official 24-hour unseen deadline are supported, but this draft does not claim that the checkout is frozen.
 
+\subsection{Final-only test access}
+Python audit guards protect the designated test file in controller and workers throughout search and refitting. Canonical paths and file identity are checked. Progressive output saves models only. A timestamped \code{selection\_completed} event precedes final test reads, and final scores have no return path into selection.
+
+These guards are a backstop rather than an OS sandbox against arbitrary native code. They cannot verify the original data-split construction or undo historical released-test exposure. Users must not use final prediction/evaluation outputs to make later prohibited choices.
+
+\section{Resource Policy and Accounting}
+Table~\ref{tab:policy} describes the proposed shared policy, not measurements of an executed run. The configuration-class defaults are smaller in some respects; the declared experiment must identify which policy it actually uses. Device auto uses supported CUDA paths when available and CPU otherwise. Recognized allocation failures can reduce batches or switch devices where implemented. GPU availability does not mean every estimator trains on GPU.
+\begin{table}[ht]\centering
+\caption{Proposed shared policy at the examined commit.}\label{tab:policy}
+\begin{tabular}{lr}\toprule Setting & Configured value\\\midrule
+Maximum trials per task & 24\\
+Total allowance / per-trial timeout & 21,600 s / 1,800 s\\
+Final-fit reserve fraction & 0.30\\
+Threads / neural batch size & 4 / 256\\
+Base random seed & 42\\
+Planner output limit / timeout & 4,096 tokens / 300 s\\
+Planner model & DeepSeek-V4.1-Flash\\
+Device / compute profile & auto / auto\\
+Progressive output & false\\\bottomrule\end{tabular}
+\end{table}
+
+The model registry checks declared model families, release dates and pricing metadata. DeepSeek's official documentation describes its API interface~\cite{deepseek}; this interface reference does not certify a provider alias or a historical price. Flash uses the configured fixed off-peak convention and cache-miss input rates. Actual deployed-revision eligibility and acceptance of the pricing convention remain separate evidence questions.
+
+The instructor clarification recorded in the pushed repository applies the RMB 20 course cap to final evaluation, excluding development. New ledgers separate development and final-evaluation scope, with one evaluation identity retained across restarts. Known tokens are recorded and priced even for unusable planning replies.
+
+Failed or timed-out calls without returned usage retain unknown actual tokens and cost and are excluded from the course cap. Their temporary reservations are released rather than booked as estimated failure charges. HTTP failures with valid token counts are charged normally. Pending requests and successful responses with missing or inconsistent usage are not automatically exempt. Historical records remain unchanged; upper-bound reconciliation write-back is disabled. This manuscript creates no new usage records and imports no historical charge as a new experimental result.
+
+\section{Evaluation Protocol and Results}
+\subsection{Tasks and partitions}
+Coupon predicts acceptance from 21 supplied context/categorical features in NumPy arrays. Headlines predicts which title in an ordered pair has higher observed click-through rate; the supplied train, validation and test partitions have 8,301, 940 and 3,232 pairs. Both tasks require final test accuracy. The quoted task metadata comes from instructions, not a new inspection of test examples.
+
+All reported tasks must use one final implementation and shared algorithm policy. Input paths, schema and announced metrics may differ, but task identity cannot select a prepared winner. Actual completed-trial counts and selected configurations must come from matching execution evidence, not from maximum-trial settings.
+\begin{table}[ht]\centering
+\caption{Reserved empirical results. Blank cells are intentional and do not mean zero.}\label{tab:results}
+\begin{tabular}{lccc}\toprule Task & Validation accuracy & Test accuracy & Completed trials\\\midrule
+Coupon & \resultblank & \resultblank & \resultblank\\[5pt]
+Headlines & \resultblank & \resultblank & \resultblank\\[5pt]
+Unseen task & \resultblank & \resultblank & \resultblank\\\bottomrule\end{tabular}
+\end{table}
+
+No accuracy value is entered in Table~\ref{tab:results}. Historical scores are not transferred because they do not establish performance of this exact pushed revision. No unseen result is claimed. The unseen row is a planning aid; the course does not require an additional unseen report.
+
+\subsection{Experiment evidence and controlled comparisons}
+For each task, the final package should include the source fingerprint, input hashes, effective policy, all attempted candidates, validation outcomes, planner decisions/rejections, fallback events, final model and predictions. Runtime, selected-trial identity and token summaries should accompany the final accuracy. Partial or failed runs require an account of the failure stage and available output.
+
+This manuscript adds no live API or classifier experiments. Source inspection identifies mechanisms; it does not measure accuracy, completion rate or a causal LLM advantage. No test-suite count is offered as a new verification result for this commit.
+
+Useful future comparisons include local-only versus LLM-enabled planning under identical candidates, data, seeds and compute limits; sparse text versus frozen encoders and fine-tuning; and image fine-tuning versus frozen features with augmentation on/off. These are proposed comparisons, not completed results. Selection must rely on training/internal validation, with designated test evaluation reserved until choices are fixed. Repeated cross-run selection by test accuracy would undermine that separation.
+
+\section{Reproducibility and Practical Use}
+Dependencies are declared in requirements files, including optional matched PyTorch~\cite{pytorch}/Torchvision and Transformer packages. Runs record source snapshots, data hashes, partitions, installed versions, seeds and devices. Generic pretrained models may need initial downloads; deployment must preserve the selected branch's tokenizer, configuration and model resources.
+
+The command-line interface separates environment checks, development and final use:
 \begin{quote}\small\ttfamily
-python main.py train --config TASK.json --output runs/new\par
-python main.py predict --model MODEL.joblib --input TEST.csv --output predictions-new.csv
+python main.py doctor\\
+python main.py train --config configs/my\_task.json --output runs/demo\\
+python main.py predict --model runs/demo/model.joblib\\
+\hspace*{1em}--input data/test.csv --output runs/demo/predictions\_new.csv
 \end{quote}
-These are command templates; inputs must be real, outputs new and serialized models trusted. API credentials remain outside the repository and outputs. Saved-model prediction does not need a planner key. The repository README and API guide provide exact options and dependencies. A GUI is not implemented.
+The wrapped prediction example is one shell command. Paths must be replaced with a valid task configuration; output locations must be new. Doctor checks basic dependencies, not every optional model or live API connectivity. If test\_csv is configured, training can generate predictions automatically after final selection. Evaluation requires labels. Prediction does not call the planner API, but this does not imply all Transformer branches are cache-independent or fully offline.
 
-The recovery entry verifies unchanged source, configuration, training/validation hashes, Python/distributions and original ledger, then restores to a new audit directory. Completed trials are not resubmitted; interrupted candidates remain identified. Parent directories preserve request/response provenance. Downtime and orphan-worker waiting count against the original budget. Locks prevent concurrent recovery, completed runs cannot resume, and the first restored decision is local to avoid replaying an interrupted API request. An isolated process-kill probe verified automatic completion and unchanged ledger paths; this is functional evidence, not proof against every possible system failure.
-
-A Python audit hook guards the configured test path before selection in the training interpreter. It is not a cross-process OS sandbox or a defense against arbitrary native code and file aliases. Batch-array conversion occurs after training. Preprocessing fits only the corresponding training fold, including each nested fold. Overlap diagnostics describe exact feature rows and normalized text; zero exact overlap cannot exclude semantic near-duplicates. Reliable timestamps/source groups are unavailable, so no chronology is invented.
-
-The current models match their own recorded source; the report generator verifies both primary snapshots against the repository runtime. Documentation-only organization does not make older models into newer-version experiments. No end-to-end training, prediction, model API request or regression test was rerun to regenerate the report.
-
-\section{Limitations and Submission Readiness}
+\section{Limitations}
 \begin{enumerate}
-\item Released tests were reused during development and cross-run frontier retention used observed test performance. Within-run isolation does not undo that history; this is not a clean independent final evaluation.
-\item The same-version primary pair fixes a source-consistency issue, but does not retroactively remove post-hoc experimental choices. Freeze a final system before a genuinely unseen evaluation.
-\item Planning is bounded rather than arbitrary code synthesis. Few valid LLM decisions in the Headlines run limit claims of language-model autonomy. Better accuracy is not attributed causally to the LLM.
-\item Three-seed means reduce reliance on one seed but do not establish split robustness or significance. Nested subsampling estimates a smaller training procedure, not the full system.
-\item Current inventory completeness is a statement about the identified records. Formal task-wide budget identity, accepted pricing and deployed revision eligibility need explicit review.
-\item Author names, student IDs, section, actual member contributions and confirmed individual AI declarations are still missing. They are not fabricated. No unseen score is reported.
+\item \textbf{Bounded autonomy.} The candidate library and rules are developer-defined. The agent adapts within them rather than synthesizing arbitrary algorithms.
+\item \textbf{Validation reuse.} Repeated comparison can overfit a fixed split. Seed repeats describe training variability; bounded nested diagnostics do not constitute complete nested evaluation of the agent.
+\item \textbf{Historical test exposure.} Within-run isolation does not remove prior development use of released tests. Independent unseen evaluation remains necessary.
+\item \textbf{Resources and portability.} CPU execution can change candidate coverage and elapsed time. Downloads, package compatibility and memory can prevent expensive branches from completing. Transformer reconstruction may still require local caches.
+\item \textbf{Heuristic allocation.} Family retirement, priorities and runtime estimates can discard useful candidates. Twenty-four trials do not exhaust the space or establish optimality.
+\item \textbf{Unverified empirical claims.} New semantic fusion, text networks and fine-tuning are available methods, not demonstrated gains in this report. Accuracy, final artifact consistency, model eligibility and member confirmations remain pending.
 \end{enumerate}
 
-The deliverable covers system design, main experiments, results and limitations as requested. Source, dependency/setup instructions, model/preprocessing artifacts and logs remain separate submission requirements. The final presentation is assessed independently. A paper-like layout does not establish compliance or guarantee a high grade.
-
 \section{Conclusion}
-The current SuperAgent provides a coherent, auditable loop from data inspection to validation-based proposals, fitting, selection and final inference. Same-runtime development results are 78.8727\% and 69.7092\%, with CNY 0.097397 recorded planning cost for that pair. The complete present ledger set totals CNY 1.319903. Improvements in engineering and text representations are supported by artifacts, while causal accuracy gains, clean final generalization and complete submission eligibility remain bounded claims. The next formal milestone is a verified frozen submission and unattended unseen evaluation, not another retrospective claim from released tests.
+The examined revision implements one auditable workflow from task inspection through validation-guided experiments to final classification. Its generality rests on reusable representations and data-dependent method selection, with explicit test isolation, recovery and accounting safeguards. The pushed source expands semantic text fusion while retaining tabular and image paths. Empirical accuracy remains unreported until complete matching autonomous runs are available. The next step is to populate the reserved results from one reporting version and assess the system on an untouched task.
 
-\appendices
-\section{Complete Primary Trial Summaries}
-Means and SD are percentages/percentage points on the official validation partition. Full parameters, seed scores, elapsed times and source fingerprints are retained in report\_data.json and original trials.jsonl. Rows are measured experiments, not generated narrative.
-\begin{table}[h]\centering\caption{Coupon: twelve current-version trials.}\small\CouponTrials\end{table}
-\begin{table}[h]\centering\caption{Headlines: twelve current-version trials.}\small\HeadlinesTrials\end{table}
+\section*{Contributions and AI Tool Use}
+Names, student IDs, section and individual responsibilities must be confirmed; none is fabricated here. AI assistance supported development and manuscript preparation. The separate AI\_USAGE.md declaration requires member confirmation. Development assistance is distinct from runtime planner usage. Every member remains responsible for understanding and explaining the submitted code and experiments.
 
-\section{Current Accounting Inventory}
-\begin{table}[h]\centering\caption{Every current ledger, with date suffixes omitted for width. Dates and source hashes are in the inventory JSON.}\label{tab:ledgers}\small\LedgerResults\end{table}
-
-\section{Evidence Index and AI Use}
-\begin{itemize}
-\item Primary runs: \path{runs/coupon-v6-20261124/} and \path{runs/headlines-v6-20261124/}.
-\item Ledger identities and hashes: \path{docs/accounting/ledger_inventory.json}.
-\item Development frontier and catalog: \path{docs/development/current_results.json} and \path{docs/development/experiment_log.md}.
-\item Rebuildable tables and source data: \path{generated.tex} and \path{report_data.json}.
-\item Reporting-only generator: \path{scripts/reporting/update_report_data.py}; it performs no training or API calls.
-\end{itemize}
-
-OpenAI Codex assisted implementation, review, testing and documentation. Runtime Flash/Pro usage is separately logged and does not measure development-tool usage. Each member must confirm actual tools, contributions and understanding in AI\_USAGE.md. The source declares known limits instead of treating missing evidence as success.
-
-\begin{thebibliography}{9}
-\bibitem{assignment} AIAA 3102 teaching team, ``Final Project: General Algorithm SuperAgent---Full Assignment Requirements,'' course-provided specification, local repository.
-\bibitem{rubric} AIAA 3102 teaching team, ``Final Project Grading Rubric (40 Points),'' course-provided rubric, local repository.
-\bibitem{evidence} Project model registries, user-selected official off-peak rates and lossless publisher evidence archives, configs/model\_registry*.json and configs/evidence/, accessed as local audit artifacts, Nov. 25, 2026.
-\bibitem{artifacts} Project execution artifacts, source fingerprints, trials, evaluations and token ledgers, current inventory snapshot, Nov. 24, 2026.
+\begin{thebibliography}{99}
+\bibitem{rf} L. Breiman, ``Random forests,'' \emph{Machine Learning}, vol. 45, pp. 5--32, 2001. \url{https://doi.org/10.1023/A:1010933404324}.
+\bibitem{extratrees} P. Geurts, D. Ernst and L. Wehenkel, ``Extremely randomized trees,'' \emph{Machine Learning}, vol. 63, pp. 3--42, 2006. \url{https://doi.org/10.1007/s10994-006-6226-1}.
+\bibitem{catboost} L. Prokhorenkova et al., ``CatBoost: Unbiased boosting with categorical features,'' \emph{Advances in Neural Information Processing Systems}, 2018. \url{https://arxiv.org/abs/1706.09516}.
+\bibitem{lightgbm} G. Ke et al., ``LightGBM: A highly efficient gradient boosting decision tree,'' \emph{Advances in Neural Information Processing Systems}, 2017. \url{https://papers.nips.cc/paper/2017/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html}.
+\bibitem{xgboost} T. Chen and C. Guestrin, ``XGBoost: A scalable tree boosting system,'' \emph{Proceedings of KDD}, 2016. \url{https://doi.org/10.1145/2939672.2939785}.
+\bibitem{sklearn} F. Pedregosa et al., ``Scikit-learn: Machine learning in Python,'' \emph{Journal of Machine Learning Research}, vol. 12, pp. 2825--2830, 2011. \url{https://www.jmlr.org/papers/v12/pedregosa11a.html}.
+\bibitem{minilm} Sentence Transformers, \emph{all-MiniLM-L6-v2 and all-MiniLM-L12-v2: Official model cards}. \url{https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2}; \url{https://huggingface.co/sentence-transformers/all-MiniLM-L12-v2}.
+\bibitem{mpnet} Sentence Transformers, \emph{all-mpnet-base-v2: Official model card}. \url{https://huggingface.co/sentence-transformers/all-mpnet-base-v2}.
+\bibitem{bge} Beijing Academy of Artificial Intelligence, \emph{bge-base-en-v1.5: Official model card}. \url{https://huggingface.co/BAAI/bge-base-en-v1.5}.
+\bibitem{e5} intfloat, \emph{e5-base-v2: Official model card}. \url{https://huggingface.co/intfloat/e5-base-v2}.
+\bibitem{gte} thenlper, \emph{gte-base: Official model card}. \url{https://huggingface.co/thenlper/gte-base}.
+\bibitem{modernbert} Answer.AI, \emph{ModernBERT-base: Official model card}. \url{https://huggingface.co/answerdotai/ModernBERT-base}.
+\bibitem{fasttext} A. Joulin, E. Grave, P. Bojanowski and T. Mikolov, ``Bag of tricks for efficient text classification,'' \emph{Proceedings of EACL}, 2017. \url{https://arxiv.org/abs/1607.01759}.
+\bibitem{textcnn} Y. Kim, ``Convolutional neural networks for sentence classification,'' \emph{Proceedings of EMNLP}, pp. 1746--1751, 2014. \url{https://aclanthology.org/D14-1181/}.
+\bibitem{gru} K. Cho et al., ``Learning phrase representations using RNN encoder--decoder for statistical machine translation,'' \emph{Proceedings of EMNLP}, 2014. \url{https://arxiv.org/abs/1406.1078}.
+\bibitem{transformers} T. Wolf et al., ``Transformers: State-of-the-art natural language processing,'' \emph{Proceedings of EMNLP: System Demonstrations}, pp. 38--45, 2020. \url{https://aclanthology.org/2020.emnlp-demos.6/}.
+\bibitem{resnet} K. He, X. Zhang, S. Ren and J. Sun, ``Deep residual learning for image recognition,'' \emph{Proceedings of CVPR}, 2016. \url{https://arxiv.org/abs/1512.03385}.
+\bibitem{torchvision} PyTorch Contributors, \emph{Torchvision documentation: ResNet-18 and pretrained weights}. \url{https://docs.pytorch.org/vision/stable/models/generated/torchvision.models.resnet18.html}.
+\bibitem{deepseek} DeepSeek, \emph{Official API documentation: Your first API call}. \url{https://api-docs.deepseek.com/}.
+\bibitem{pytorch} A. Paszke et al., ``PyTorch: An imperative style, high-performance deep learning library,'' \emph{Advances in Neural Information Processing Systems}, 2019. \url{https://arxiv.org/abs/1912.01703}.
 \end{thebibliography}
 \end{document}

@@ -115,7 +115,7 @@ def apply_proposal(base, overrides, profile, trial_memory=None):
             raise ValueError('Unapproved parameter')
         allowed = rules[key]
         if key=='vectorizer_options':
-            from superagent.preprocessing.transformers import checked_vectorizer_options
+            from superagent.preprocessing.components.text import checked_vectorizer_options
             value=checked_vectorizer_options(value)
         elif isinstance(allowed, list):
             if value not in allowed or (key == 'representation' and not base.get('representation')):
