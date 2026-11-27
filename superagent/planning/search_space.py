@@ -50,7 +50,8 @@ def allocate_candidates(candidates, profile, history):
     rows = profile.get('rows', 0)
     costly = {'minilm_logistic', 'torch_pretrained', 'frozen_image_logistic', 'torch_ensemble',
               'image_meta_blend', 'rbf_svm', 'embedding_logistic', 'embedding_mlp',
-              'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost', 'transformer_finetune'}
+              'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost', 'transformer_finetune',
+              'pairwise_semantic_blend', 'pairwise_overlap_xgb'}
     eligible = [c for c in candidates if not (c['family'] in costly and remaining < 60)
                 and not (c['family'] == 'rbf_svm' and rows > 20000)]
     # Preserve established general baselines before optional feature/encoder sweeps.
@@ -64,7 +65,8 @@ def allocate_candidates(candidates, profile, history):
         # spending the remaining trials only on close variants of the same
         # sparse linear model.
         novel = {'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost',
-                 'embedding_logistic', 'embedding_mlp'}
+                 'embedding_logistic', 'embedding_mlp', 'pairwise_semantic_blend',
+                 'pairwise_overlap_xgb', 'catboost_cross'}
         novel_ready = len(history) >= 2 and family in novel
         return (0 if anchor or novel_ready else 1 if family == 'frozen_image_logistic'
                 else 2 if family in costly or c.get('feature_filter') else 1)
@@ -188,6 +190,12 @@ def next_candidate(profile, history, metric):
             if importlib.util.find_spec('catboost') is not None:
                 extra += [{'family': 'tabular_blend'}]
         initial[2:2] = extra
+        if importlib.util.find_spec('catboost') is not None:
+            initial.append({'family': 'catboost_cross', 'iterations': 1800, 'depth': 8,
+                            'learning_rate': .04, 'l2_leaf_reg': 10,
+                            'max_ctr_complexity': 6, 'one_hot_max_size': 32,
+                            'random_strength': 2., 'bagging_temperature': 1.,
+                            'grow_policy': 'Lossguide', 'max_leaves': 64})
     if profile['data_type'] == 'text' and len(profile.get('text_columns') or []) > 1:
         ordered = [{'family': 'logistic', 'C': c, 'analyzer': analyzer, 'representation': mode}
                    for mode in ('difference', 'separate') for analyzer in ('word', 'char', 'combined') for c in (.1, 1., 10.)
@@ -227,6 +235,13 @@ def next_candidate(profile, history, metric):
         # Pairwise tasks get the signed overlap anchor before single-text
         # logistic variants; this remains modality/shape-based, not task-specific.
         initial[0:0] = [overlap, pairwise, dict(pairwise,pairwise_word_features=True)]
+        if large_gpu and importlib.util.find_spec('xgboost') is not None:
+            initial.append({'family': 'pairwise_overlap_xgb', 'iterations': 800, 'depth': 3,
+                            'learning_rate': .05, 'reg_lambda': 10})
+        if profile.get('text_encoder_available'):
+            initial.append({'family': 'pairwise_semantic_blend', 'semantic_weight': .1,
+                            'C': 1., 'encoder': 'mpnet', 'batch_size':
+                            profile.get('neural_batch_size', 64), 'max_length': 256})
     if profile['data_type'] == 'text' and profile.get('torch_available'):
         # Trainable text stacks are independent of the TF-IDF vocabulary.  Keep
         # them after the established sparse anchors so a large candidate list
@@ -428,6 +443,19 @@ def next_candidate(profile, history, metric):
             variants = [dict(candidate, C=value) for value in (.3, 3.)]
             variants += [dict(candidate, fit_intercept=not candidate.get('fit_intercept', True)),
                          dict(candidate, class_weight='balanced')]
+        elif family == 'pairwise_overlap_xgb':
+            variants = [dict(candidate, iterations=count) for count in (400, 1200)]
+            variants += [dict(candidate, depth=value) for value in (6, 8)]
+            variants += [dict(candidate, reg_lambda=value) for value in (1., 30.)]
+        elif family == 'pairwise_semantic_blend':
+            variants = [dict(candidate, semantic_weight=value) for value in (.05, .2)]
+            variants += [dict(candidate, C=value) for value in (.1, 10.)]
+            variants += [dict(candidate, encoder=value) for value in ('bge', 'e5')]
+        elif family == 'catboost_cross':
+            variants = [dict(candidate, max_ctr_complexity=value) for value in (3, 8)]
+            variants += [dict(candidate, one_hot_max_size=value) for value in (8, 64)]
+            variants += [dict(candidate, depth=value) for value in (6, 10)]
+            variants += [dict(candidate, max_leaves=value) for value in (32, 128)]
         elif family in {"linear_svm", "rbf_svm"}:
             variants = [dict(candidate, C=value) for value in (.01, 100.)]
         elif family == "logistic":
@@ -645,6 +673,26 @@ def _build_model(profile, candidate, config):
     if family == 'pairwise_overlap':
         from superagent.models.pairwise import overlap_classifier
         return overlap_classifier(profile['text_columns'], candidate, config.seed)
+    if family == 'pairwise_overlap_xgb':
+        from superagent.models.pairwise import overlap_xgb_classifier
+        return overlap_xgb_classifier(profile['text_columns'], candidate, config)
+    if family == 'pairwise_semantic_blend':
+        from superagent.models.tabular import ProbabilityBlend
+        weight = candidate.get('semantic_weight', .1)
+        pairwise = build_model(profile, {
+            'family': 'pairwise_overlap', 'C': candidate.get('C', 1.),
+            'fit_intercept': True,
+            'vectorizer_options': candidate.get('vectorizer_options') or {'ngram_range': [3, 6]},
+        }, config)
+        semantic = build_model(profile, {
+            'family': 'embedding_logistic', 'C': candidate.get('C', 1.),
+            'encoder': candidate.get('encoder', 'mpnet'),
+            'batch_size': candidate.get('batch_size', 64),
+            'max_length': candidate.get('max_length', 256),
+        }, config)
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', ProbabilityBlend(
+                             [pairwise, semantic], weights=[1 - weight, weight]))])
     common = {"random_state": config.seed}
     if family == "dummy":
         estimator = DummyClassifier(strategy="prior", **common)
@@ -672,6 +720,21 @@ def _build_model(profile, candidate, config):
                                           learning_rate=candidate['learning_rate'],
                                           l2_leaf_reg=candidate['l2_leaf_reg'], threads=config.threads,
                                           balanced=candidate.get('balanced', False), **common)
+    elif family == "catboost_cross":
+        from superagent.models.tabular import NativeBoostClassifier
+
+        estimator = NativeBoostClassifier(
+            iterations=candidate['iterations'], depth=candidate['depth'],
+            learning_rate=candidate['learning_rate'], l2_leaf_reg=candidate['l2_leaf_reg'],
+            threads=config.threads, balanced=candidate.get('balanced', False),
+            max_ctr_complexity=candidate.get('max_ctr_complexity', 4),
+            one_hot_max_size=candidate.get('one_hot_max_size', 2),
+            random_strength=candidate.get('random_strength', 1.),
+            bagging_temperature=candidate.get('bagging_temperature', 1.),
+            grow_policy=candidate.get('grow_policy', 'SymmetricTree'),
+            max_leaves=candidate.get('max_leaves'),
+            border_count=candidate.get('border_count', 254),
+            boosting_type=candidate.get('boosting_type', 'Plain'), **common)
     elif family in {'lightgbm', 'catboost_ensemble', 'tabular_blend'}:
         from superagent.models.tabular import advanced_estimator
 
@@ -729,7 +792,7 @@ def _build_model(profile, candidate, config):
             estimator = TorchClassifier(**params, device=config.device, **common)
     else:
         raise ValueError(f"Unsupported model family: {family}")
-    if family in {"catboost", "lightgbm", "catboost_ensemble", "tabular_blend", "cross_boost_blend"}:
+    if family in {"catboost", "catboost_cross", "lightgbm", "catboost_ensemble", "tabular_blend", "cross_boost_blend"}:
         from superagent.models.tabular import NativeCategories
 
         return Pipeline([("preprocess", NativeCategories(

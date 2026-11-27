@@ -35,7 +35,10 @@ class NativeCategories(FrameSchema):
 
 class NativeBoostClassifier(ClassifierMixin, BaseEstimator):
     def __init__(self, iterations=600, depth=6, learning_rate=0.05, l2_leaf_reg=3,
-                 random_state=42, threads=1, balanced=False):
+                 random_state=42, threads=1, balanced=False, max_ctr_complexity=4,
+                 one_hot_max_size=2, random_strength=1.0, bagging_temperature=1.0,
+                 grow_policy='SymmetricTree', max_leaves=None, border_count=254,
+                 boosting_type='Plain'):
         self.iterations = iterations
         self.depth = depth
         self.learning_rate = learning_rate
@@ -43,17 +46,34 @@ class NativeBoostClassifier(ClassifierMixin, BaseEstimator):
         self.random_state = random_state
         self.threads = threads
         self.balanced = balanced
+        self.max_ctr_complexity = max_ctr_complexity
+        self.one_hot_max_size = one_hot_max_size
+        self.random_strength = random_strength
+        self.bagging_temperature = bagging_temperature
+        self.grow_policy = grow_policy
+        self.max_leaves = max_leaves
+        self.border_count = border_count
+        self.boosting_type = boosting_type
 
     def fit(self, X, y):
         from catboost import CatBoostClassifier
 
         self.classes_, encoded = np.unique(np.asarray(y, dtype=str), return_inverse=True)
         categorical = [c for c in X.columns if X[c].dtype == object]
-        self.model_ = CatBoostClassifier(iterations=self.iterations, depth=self.depth,
-                                        learning_rate=self.learning_rate, l2_leaf_reg=self.l2_leaf_reg,
-                                        random_seed=self.random_state, thread_count=self.threads,
-                                        cat_features=categorical, verbose=False, allow_writing_files=False,
-                                        auto_class_weights='Balanced' if self.balanced else None)
+        options = dict(iterations=self.iterations, depth=self.depth,
+                       learning_rate=self.learning_rate, l2_leaf_reg=self.l2_leaf_reg,
+                       random_seed=self.random_state, thread_count=self.threads,
+                       cat_features=categorical, verbose=False, allow_writing_files=False,
+                       auto_class_weights='Balanced' if self.balanced else None,
+                       max_ctr_complexity=self.max_ctr_complexity,
+                       one_hot_max_size=self.one_hot_max_size,
+                       random_strength=self.random_strength,
+                       bagging_temperature=self.bagging_temperature,
+                       border_count=self.border_count,
+                       boosting_type=self.boosting_type)
+        if self.max_leaves is not None:
+            options.update(grow_policy=self.grow_policy, max_leaves=self.max_leaves)
+        self.model_ = CatBoostClassifier(**options)
         # No external validation/test rows enter target statistics or fitting.
         self.model_.fit(X, encoded)
         self.n_features_in_ = X.shape[1]
