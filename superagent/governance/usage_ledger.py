@@ -27,6 +27,17 @@ class UsageUncertain(RuntimeError):
     pass
 
 
+FAILED_WITHOUT_USAGE = {'TimeoutError', 'HTTPError', 'URLError', 'ConnectionError',
+                        'ConnectionResetError', 'RemoteDisconnected', 'SSLError'}
+
+
+def excluded_failure(call):
+    """Read historical failures without rewriting their original evidence."""
+    return (call.get('status') in {'usage_unknown', 'reconciled_conservative'}
+            and (call.get('budget_excluded_reason') == 'failed_request_without_usage'
+                 or call.get('error') in FAILED_WITHOUT_USAGE))
+
+
 ROLLING_ALIASES = {
     "deepseek-chat", "deepseek-reasoner", "qwen-plus", "qwen-max",
     "qwen-turbo", "qwen-long", "qwen-flash", "qwen3-max",
@@ -198,12 +209,18 @@ def worst_case_cost(model, max_output_tokens=None):
 
 
 class UsageLedger:
-    def __init__(self, directory, evaluation_id, budget="20"):
+    def __init__(self, directory, evaluation_id, budget="20", evaluation_stage='released'):
         self.directory = Path(directory).resolve()
         self.directory.mkdir(parents=True, exist_ok=True)
         self.path = self.directory / "ledger.json"
         self.evaluation_id = evaluation_id
-        self.budget = min(amount(budget), Decimal("20"))
+        if evaluation_stage not in {'development', 'released', 'unseen'}:
+            raise ValueError('Unsupported accounting evaluation stage')
+        self.evaluation_stage = evaluation_stage
+        self.budget_scope = 'development' if evaluation_stage == 'development' else 'final_evaluation'
+        self.budget = amount(budget)
+        if self.budget <= 0 or (self.budget_scope == 'final_evaluation' and self.budget > 20):
+            raise ValueError('Final evaluation budget must be positive and at most RMB 20')
 
     @contextmanager
     def locked(self):
@@ -220,10 +237,13 @@ class UsageLedger:
 
     def _read(self):
         if not self.path.exists():
-            return {"schema_version": 1, "evaluation_id": self.evaluation_id, "calls": []}
+            return {"schema_version": 1, "evaluation_id": self.evaluation_id,
+                    'budget_scope': self.budget_scope, "calls": []}
         state = json.loads(self.path.read_text(encoding="utf-8"))
         if state.get("evaluation_id") != self.evaluation_id:
             raise ValueError("Usage ledger belongs to another evaluation task")
+        if state.get('budget_scope', self.budget_scope) != self.budget_scope:
+            raise ValueError('Development and final evaluation cannot share one ledger')
         return state
 
     def reserve(self, model, max_output_tokens, agent_id, run_id, request_path, allow_reserved_unknown=False):
@@ -231,17 +251,19 @@ class UsageLedger:
             raise ValueError("Output-token limit must be positive")
         with self.locked():
             state = self._read()
-            if any(call['status'] != 'recorded' and (not allow_reserved_unknown or call['status'] != 'usage_unknown') for call in state['calls']):
+            if any(call['status'] != 'recorded' and not excluded_failure(call) for call in state['calls']):
                 raise UsageUncertain("Prior request has unreconciled usage; no further model requests allowed")
-            spent = sum((amount(call['cost_rmb']) if call.get('cost_rmb') is not None else amount(call['reserved_rmb']) for call in state['calls']), Decimal(0))
+            spent = sum((amount(call['cost_rmb']) if call.get('cost_rmb') is not None else amount(call['reserved_rmb'])
+                         for call in state['calls'] if not excluded_failure(call)), Decimal(0))
             rates = pricing_rows(model)
             # Cover reasoning output too, even on a provider whose max_tokens
             # interpretation is narrower than total generated output tokens.
             reserve = worst_case_cost(model, max_output_tokens)
-            if spent + reserve > self.budget:
+            if self.budget_scope == 'final_evaluation' and spent + reserve > self.budget:
                 raise BudgetExhausted("Next worst-case model request would exceed this task's RMB budget")
             call = {"call_id": uuid.uuid4().hex, "agent_id": agent_id, "run_id": run_id,
                     "evaluation_id": self.evaluation_id, "status": "pending",
+                    'evaluation_stage': self.evaluation_stage, 'budget_scope': self.budget_scope,
                     "model_id": model["model_id"], "family": model["family"],
                     "pricing_as_of": MODEL_CUTOFF,
                     "official_standard_pricing": rates,
@@ -252,7 +274,8 @@ class UsageLedger:
             write_json(self.path, state)
             return call
 
-    def finish(self, call_id, model, usage=None, error=None, dns_not_sent=False):
+    def finish(self, call_id, model, usage=None, error=None, dns_not_sent=False,
+               failed_without_usage=False, http_status=None, provider_request_id=None):
         with self.locked():
             state = self._read()
             call = next(item for item in state["calls"] if item["call_id"] == call_id)
@@ -265,8 +288,13 @@ class UsageLedger:
                             input_tokens=0, output_tokens=0, cost_rmb='0', accounting_complete=True,
                             usage_basis='Local DNS failed before any HTTP request could be sent')
             elif usage is None:
+                exempt = failed_without_usage or error in FAILED_WITHOUT_USAGE
                 call.update(status="usage_unknown", error=error,
-                            cost_rmb=None, accounting_complete=False)
+                            input_tokens=None, output_tokens=None, cost_rmb=None,
+                            accounting_complete=exempt, token_usage_complete=False,
+                            budget_excluded_reason='failed_request_without_usage' if exempt else None,
+                            course_budget_cost_rmb='0' if exempt or self.budget_scope == 'development' else None,
+                            http_status=http_status)
             else:
                 prompt = tokens(usage["prompt_tokens"])
                 completion = tokens(usage["completion_tokens"])
@@ -281,73 +309,46 @@ class UsageLedger:
                 call["applied_rates"] = applicable_rates(model, prompt)
                 if prompt == 0 or prompt > model["context_window_tokens"] or completion > model["context_window_tokens"]:
                     call.update(status="reported_usage_exceeds_reservation", accounting_complete=False)
+            if call['status'] == 'recorded':
+                call['course_budget_cost_rmb'] = call['cost_rmb'] if self.budget_scope == 'final_evaluation' else '0'
+            call.update(error=error, http_status=http_status, provider_request_id=provider_request_id,
+                        finished_at_utc=datetime.now(timezone.utc).isoformat())
             write_json(self.path, state)
             append_json(self.directory / "calls.jsonl", call)
             return call
 
-    def reconcile_unknown(self, call_id, basis, evidence, reconciled_by="usage-reconciliation"):
-        """Close an unrecorded call as an explicit conservative charge.
-
-        A read timeout proves the request reached the provider but not that it
-        generated nothing. Token usage is therefore unrecoverable. This books the
-        worst-case reservation as a stated upper bound instead of inventing token
-        counts or assuming a zero-cost call, and leaves ``accounting_complete``
-        False: the charge is bounded, the actual usage is still unknown, so the
-        run stays ineligible for formal submission.
-        """
-        if not isinstance(basis, str) or not basis.strip():
-            raise ValueError("Reconciliation requires a stated basis")
-        if not isinstance(evidence, str) or not evidence.strip():
-            raise ValueError("Reconciliation requires original evidence (path or record id)")
-        with self.locked():
-            state = self._read()
-            call = next((item for item in state["calls"] if item["call_id"] == call_id), None)
-            if call is None:
-                raise ValueError("Unknown call_id in this task ledger")
-            if call["status"] not in {"usage_unknown", "pending"}:
-                raise ValueError("Only unrecorded calls can be reconciled")
-            reserved = amount(call["reserved_rmb"])
-            call.update(status="reconciled_conservative", cost_rmb=str(reserved),
-                        accounting_complete=False,
-                        usage_basis=("Provider token usage was never returned; the worst-case "
-                                     "reservation is booked as an upper bound, not as actual usage"),
-                        reconciliation={"basis": basis.strip(), "evidence": evidence.strip(),
-                                        "conservative_charge_rmb": str(reserved),
-                                        "actual_usage": "unrecoverable",
-                                        "reconciled_by": reconciled_by,
-                                        "timestamp_utc": datetime.now(timezone.utc).isoformat()})
-            write_json(self.path, state)
-            append_json(self.directory / "calls.jsonl", call)
-            return call
+    def reconcile_unknown(self, *args, **kwargs):
+        raise ValueError('Historical ledgers are immutable; failed requests need no upper-bound reconciliation')
 
     def summary(self):
         with self.locked():
             state = self._read()
-        calls = state["calls"]
-        known = sum((amount(call["cost_rmb"]) for call in calls
-                     if call.get("cost_rmb") is not None and call["status"] == "recorded"), Decimal(0))
-        conservative = sum((amount(call["cost_rmb"]) for call in calls
-                            if call.get("cost_rmb") is not None and call["status"] == "reconciled_conservative"),
-                           Decimal(0))
-        held = sum((amount(call["reserved_rmb"]) for call in calls
-                    if call["status"] in {"pending", "usage_unknown"}), Decimal(0))
-        reconciled = sum(1 for call in calls if call["status"] == "reconciled_conservative")
-        complete = all(call.get("accounting_complete", False) for call in calls)
-        inputs = sum(call.get("input_tokens", 0) for call in calls)
-        outputs = sum(call.get("output_tokens", 0) for call in calls)
-        return {"evaluation_id": self.evaluation_id, "budget_rmb": str(self.budget),
-                "actual_recorded_cost_rmb": str(known),
-                "conservative_reconciled_cost_rmb": str(conservative),
-                "charged_total_cost_rmb": str(known + conservative),
-                "reconciled_call_count": reconciled,
-                "unreconciled_reserved_rmb": str(held),
-                "actual_total_cost_rmb": str(known) if complete else None,
-                "call_count": len(calls),
-                "recorded_input_tokens": inputs, "recorded_output_tokens": outputs,
-                "input_tokens": inputs if complete else None, "output_tokens": outputs if complete else None,
-                "accounting_complete": complete,
-                "within_budget": known + conservative + held <= self.budget,
-                "ledger_path": str(self.path), "requires_all_agents_to_share_ledger": True}
+        calls = state['calls']
+        exempt = [c for c in calls if excluded_failure(c)]
+        known = sum((amount(c['cost_rmb']) for c in calls if c['status'] == 'recorded'), Decimal(0))
+        conservative = sum((amount(c['cost_rmb']) for c in calls
+                            if c['status'] == 'reconciled_conservative' and not excluded_failure(c)), Decimal(0))
+        held = sum((amount(c['reserved_rmb']) for c in calls
+                    if c['status'] in {'pending', 'usage_unknown'} and not excluded_failure(c)), Decimal(0))
+        complete = all(c.get('accounting_complete', False) or excluded_failure(c) for c in calls)
+        token_complete = all(c['status'] == 'recorded' for c in calls)
+        inputs = sum(c.get('input_tokens') or 0 for c in calls if c['status'] == 'recorded')
+        outputs = sum(c.get('output_tokens') or 0 for c in calls if c['status'] == 'recorded')
+        final = self.budget_scope == 'final_evaluation'
+        return {'evaluation_id': self.evaluation_id, 'budget_rmb': str(self.budget),
+                'budget_scope': self.budget_scope, 'accounting_policy': 'course_clarification_2026_11_26',
+                'actual_recorded_cost_rmb': str(known), 'conservative_reconciled_cost_rmb': str(conservative),
+                'charged_total_cost_rmb': str(known), 'course_budget_cost_rmb': str(known if final else Decimal(0)),
+                'reconciled_call_count': sum(c['status'] == 'reconciled_conservative' for c in calls),
+                'unreconciled_reserved_rmb': str(held),
+                'actual_total_cost_rmb': str(known) if token_complete else None,
+                'call_count': len(calls), 'excluded_failed_call_count': len(exempt),
+                'recorded_input_tokens': inputs, 'recorded_output_tokens': outputs,
+                'input_tokens': inputs if token_complete else None,
+                'output_tokens': outputs if token_complete else None,
+                'token_usage_complete': token_complete, 'accounting_complete': complete,
+                'within_budget': not final or known + conservative + held <= self.budget,
+                'ledger_path': str(self.path), 'requires_all_agents_to_share_ledger': True}
 
     def audit_records(self):
         with self.locked():

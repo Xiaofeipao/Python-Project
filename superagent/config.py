@@ -125,8 +125,8 @@ class TaskConfig:
             raise ValueError("Unseen runs require the official release timestamp")
         if self.llm_mode not in {"disabled", "required"}:
             raise ValueError("llm_mode must be disabled or required")
-        if not 0 < amount(self.llm_budget_rmb) <= 20:
-            raise ValueError("The model budget must be positive and cannot exceed RMB 20 per task")
+        if amount(self.llm_budget_rmb) <= 0 or (self.evaluation_stage != 'development' and amount(self.llm_budget_rmb) > 20):
+            raise ValueError("Final evaluation budget must be positive and cannot exceed RMB 20 per task")
         self.llm_budget_rmb = str(amount(self.llm_budget_rmb))
         if not isinstance(self.llm_api_key_env, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.llm_api_key_env):
             raise ValueError("llm_api_key_env must name an environment variable, not contain an API key")

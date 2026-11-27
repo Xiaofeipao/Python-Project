@@ -53,8 +53,11 @@ class PairwiseWordTests(unittest.TestCase):
     def test_discovery_uses_input_shape_not_column_identity(self):
         history=[{'candidate':{'family':'dummy'},'status':'success','score':.5}]
         first,_=next_candidate(self.profile,history,'accuracy')
-        self.assertEqual(first,self.base)
+        self.assertEqual(first['family'],'pairwise_overlap')
         history.append({'candidate':first,'status':'success','score':.5})
+        plain,_=next_candidate(self.profile,history,'accuracy')
+        self.assertEqual(plain,self.base)
+        history.append({'candidate':plain,'status':'success','score':.5})
         second,_=next_candidate(self.profile,history,'accuracy')
         self.assertTrue(second['pairwise_word_features'])
         multi={'data_type':'text','text_columns':['one','two','three']}

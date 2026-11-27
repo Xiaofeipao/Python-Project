@@ -22,3 +22,7 @@ asserts that an individual has already reviewed or approved the submission.
 - Member 2: pending personal confirmation.
 - Member 3: pending personal confirmation.
 - Member 4: pending personal confirmation.
+
+## Updated course accounting rule
+
+The instructor clarification supplied on 26 November 2026 excludes development experiments from the final-task RMB 20 budget. Failed or timed-out calls without returned usage keep token counts and actual cost unknown and are explicitly excluded from the course budget. This exclusion is not a claim of zero provider usage. Known token usage is still recorded and priced. Historical records are retained without modification; current rules are in docs/accounting/policy.md.

@@ -37,4 +37,7 @@ class DNSUsageTests(unittest.TestCase):
             self.assertEqual(ledger.summary()['actual_total_cost_rmb'], '0')
             call = ledger.reserve(model, 64, 'planner', 'run', 'request2.json')
             ledger.finish(call['call_id'], model, error='TimeoutError')
-            self.assertFalse(ledger.summary()['accounting_complete'])
+            self.assertTrue(ledger.summary()['accounting_complete'])
+            self.assertFalse(ledger.summary()['token_usage_complete'])
+            self.assertIsNone(ledger.summary()['actual_total_cost_rmb'])
+            self.assertEqual(ledger.summary()['course_budget_cost_rmb'], '0')

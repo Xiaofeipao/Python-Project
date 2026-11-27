@@ -1,77 +1,62 @@
-"""Reconciliation must price unknown usage at the reservation bound, never at zero."""
-
+"""Unknown usage stays unknown; historical evidence is never rewritten."""
+import json
 import tempfile
 import unittest
 from pathlib import Path
-from decimal import Decimal
-
 from superagent.governance.usage_ledger import UsageLedger, UsageUncertain
+
+MODEL = {'model_id':'DeepSeek-Fixture', 'family':'DeepSeek', 'context_window_tokens':4096,
+         'input_rmb_per_million':'1', 'output_rmb_per_million':'2'}
 
 
 class ReconciliationTests(unittest.TestCase):
-    def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        self.model = {"model_id": "qwen-unit-test-20261020", "family": "Qwen",
-                      "release_date": "2026-10-20", "standard_pricing": True,
-                      "context_window_tokens": 4096, "input_rmb_per_million": "1",
-                      "output_rmb_per_million": "2", "response_model_ids": ["qwen-unit-test-20261020"]}
-        self.evidence = self.root / "request.json"
-        self.evidence.write_text('{"fixture": true}', encoding="utf-8")
+    def test_failed_unknown_is_excluded_without_fabricating_usage(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=UsageLedger(folder,'fixture')
+            call=ledger.reserve(MODEL,128,'planner','run','request')
+            record=ledger.finish(call['call_id'],MODEL,error='HTTPError',http_status=500)
+            self.assertIsNone(record['input_tokens'])
+            self.assertIsNone(record['output_tokens'])
+            self.assertIsNone(record['cost_rmb'])
+            summary=ledger.summary()
+            self.assertTrue(summary['accounting_complete'])
+            self.assertFalse(summary['token_usage_complete'])
+            self.assertEqual(summary['course_budget_cost_rmb'],'0')
+            self.assertEqual(summary['unreconciled_reserved_rmb'],'0')
+            self.assertEqual(record['http_status'],500)
+            ledger.reserve(MODEL,128,'planner','next','request2')
 
-    def _timed_out_call(self, ledger):
-        call = ledger.reserve(self.model, 128, "agent", "run", str(self.evidence))
-        ledger.finish(call["call_id"], self.model, error="TimeoutError")
-        return call
+    def test_success_missing_usage_and_pending_requests_are_not_exempt(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=UsageLedger(folder,'fixture')
+            call=ledger.reserve(MODEL,128,'planner','run','request')
+            ledger.finish(call['call_id'],MODEL,error='UsageUncertain')
+            self.assertFalse(ledger.summary()['accounting_complete'])
+            with self.assertRaises(UsageUncertain):
+                ledger.reserve(MODEL,128,'planner','next','request2',allow_reserved_unknown=True)
 
-    def test_timeout_is_charged_at_the_reservation_bound(self):
-        ledger = UsageLedger(self.root / "ledger", "task", "20")
-        call = self._timed_out_call(ledger)
-        before = ledger.summary()
-        self.assertFalse(before["accounting_complete"])
-        self.assertGreater(Decimal(before["unreconciled_reserved_rmb"]), 0)
+    def test_historical_reconciliation_is_read_only(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=UsageLedger(folder,'fixture')
+            call=ledger.reserve(MODEL,128,'planner','run','request')
+            ledger.finish(call['call_id'],MODEL,error='TimeoutError')
+            state=json.loads(ledger.path.read_text())
+            state['calls'][0].update(status='reconciled_conservative', cost_rmb='0.1',accounting_complete=False)
+            ledger.path.write_text(json.dumps(state))
+            before=ledger.path.read_bytes()
+            self.assertEqual(ledger.summary()['course_budget_cost_rmb'],'0')
+            with self.assertRaises(ValueError):
+                ledger.reconcile_unknown(call['call_id'],'timeout','evidence')
+            self.assertEqual(ledger.path.read_bytes(),before)
 
-        recorded = ledger.reconcile_unknown(call["call_id"], "Provider never returned usage after a read timeout",
-                                            str(self.evidence))
-        after = ledger.summary()
-        self.assertEqual(recorded["status"], "reconciled_conservative")
-        self.assertEqual(Decimal(after["unreconciled_reserved_rmb"]), Decimal("0"))
-        self.assertEqual(after["conservative_reconciled_cost_rmb"], recorded["reserved_rmb"])
-        self.assertEqual(after["actual_recorded_cost_rmb"], "0")
-        self.assertEqual(after["reconciled_call_count"], 1)
-        self.assertFalse(after["accounting_complete"])
-        self.assertIsNone(after["actual_total_cost_rmb"])
-        self.assertNotIn("input_tokens", recorded)
-        self.assertEqual(recorded["reconciliation"]["actual_usage"], "unrecoverable")
-
-    def test_reconciliation_requires_evidence_and_is_single_use(self):
-        ledger = UsageLedger(self.root / "guarded", "task", "20")
-        call = self._timed_out_call(ledger)
-        with self.assertRaises(ValueError):
-            ledger.reconcile_unknown(call["call_id"], "  ", str(self.evidence))
-        with self.assertRaises(ValueError):
-            ledger.reconcile_unknown(call["call_id"], "timeout", " ")
-        with self.assertRaises(ValueError):
-            ledger.reconcile_unknown("not-a-call", "timeout", str(self.evidence))
-        ledger.reconcile_unknown(call["call_id"], "timeout", str(self.evidence))
-        with self.assertRaises(ValueError):
-            ledger.reconcile_unknown(call["call_id"], "timeout again", str(self.evidence))
-
-    def test_reconciled_task_still_refuses_new_requests(self):
-        ledger = UsageLedger(self.root / "blocked", "task", "20")
-        call = self._timed_out_call(ledger)
-        ledger.reconcile_unknown(call["call_id"], "timeout", str(self.evidence))
-        with self.assertRaises(UsageUncertain):
-            ledger.reserve(self.model, 128, "agent", "run2", str(self.evidence))
-
-    def test_never_finalized_call_can_be_reconciled(self):
-        ledger = UsageLedger(self.root / "pending", "task", "20")
-        call = ledger.reserve(self.model, 128, "agent", "run", str(self.evidence))
-        recorded = ledger.reconcile_unknown(call["call_id"], "Process died before finalization",
-                                            str(self.evidence))
-        self.assertEqual(recorded["status"], "reconciled_conservative")
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_development_costs_are_recorded_but_not_capped_or_charged_to_course(self):
+        with tempfile.TemporaryDirectory() as folder:
+            ledger=UsageLedger(folder,'fixture','0.000001',evaluation_stage='development')
+            call=ledger.reserve(MODEL,128,'planner','run','request')
+            ledger.finish(call['call_id'],MODEL,usage={'prompt_tokens':100,'completion_tokens':50})
+            summary=ledger.summary()
+            self.assertEqual(summary['actual_recorded_cost_rmb'],'0.0002')
+            self.assertEqual(summary['course_budget_cost_rmb'],'0')
+            self.assertTrue(summary['within_budget'])
+            with self.assertRaises(ValueError):
+                UsageLedger(folder,'fixture',evaluation_stage='released').summary()

@@ -6,7 +6,7 @@ One system selects classification methods using training data, resources and val
 
 - [Documentation index](docs/README.md) and [architecture](docs/architecture.md)
 - [Reproducible environment and pinned pretrained weights](docs/guides/reproducible_environment.md)
-- [Current accounting records](docs/accounting/README.md) and [model pointers](docs/development/current_results.json)
+- [Current accounting policy](docs/accounting/policy.md), [retained records](docs/accounting/README.md) and [model pointers](docs/development/current_results.json)
 - [Commands for running SuperAgent](docs/guides/quickstart.md)
 - [Review of every proposed improvement](docs/development/recommendation_review.md)
 - [Experiment log](docs/development/experiment_log.md)

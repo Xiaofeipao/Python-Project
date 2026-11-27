@@ -96,15 +96,16 @@ class FormalRequirements(unittest.TestCase):
         ]}
         self.assertEqual(official_cost(model, 100, 50), Decimal("0.0005"))
 
-    def test_budget_reserved_before_request_and_unknown_usage_blocks_retries(self):
+    def test_failed_unknown_usage_releases_budget_but_pending_calls_block(self):
         small = UsageLedger(self.root / "small", "task", "0.001")
         with self.assertRaises(BudgetExhausted):
             small.reserve(self.model, 128, "agent", "run", "request.json")
         ledger = UsageLedger(self.root / "unknown", "task", "20")
         call = ledger.reserve(self.model, 128, "agent", "run", "request.json")
         ledger.finish(call["call_id"], self.model, error="TimeoutError")
-        self.assertFalse(ledger.summary()["accounting_complete"])
-        self.assertGreater(Decimal(ledger.summary()["unreconciled_reserved_rmb"]), 0)
+        self.assertTrue(ledger.summary()["accounting_complete"])
+        self.assertEqual(Decimal(ledger.summary()["unreconciled_reserved_rmb"]), 0)
+        ledger.reserve(self.model, 128, "agent", "run2", "request2.json")
         with self.assertRaises(UsageUncertain):
             ledger.reserve(self.model, 128, "another-agent", "another-run", "request.json")
 
@@ -118,7 +119,7 @@ class FormalRequirements(unittest.TestCase):
     def test_course_budget_cannot_be_raised(self):
         for budget in ("20.01", "0", "NaN"):
             with self.assertRaises(ValueError):
-                TaskConfig(train_csv="unused", target_column="label", llm_budget_rmb=budget).validate()
+                TaskConfig(train_csv="unused", target_column="label", llm_budget_rmb=budget, evaluation_stage="released", evaluation_id="fixture", frozen_manifest="fixture").validate()
 
     def test_frozen_policy_rejects_task_specific_search_overrides(self):
         policy = self.root / "policy.json"
@@ -167,7 +168,7 @@ class FormalRequirements(unittest.TestCase):
                             llm_max_output_tokens=512,
                             llm_registry=str(self.registry), llm_model_id=self.model["model_id"],
                             llm_base_url="http://127.0.0.1:1/v1")
-        history = [{"candidate": {"family": "dummy"}, "status": "success", "score": 0.5}]
+        history = [{"candidate": {"family": "dummy"}, "status": "success", "score": 0.5}, {"candidate": {"family": "logistic", "C": 3.}, "status": "success", "score": 0.6}]
         payload = {"model": self.model["model_id"],
                    "usage": {"prompt_tokens": 100, "completion_tokens": 10, "total_tokens": 110},
                    "choices": [{"message": {"content": '{"choice": 0, "reason": "validation-driven experiment", "diagnosis": "Prior baseline establishes class frequencies", "next_action": "Compare the next candidate using validation only"}'}}]}
@@ -191,7 +192,7 @@ class FormalRequirements(unittest.TestCase):
         config = TaskConfig(train_csv='unused', target_column='label', llm_mode='required',
             llm_max_output_tokens=512, llm_registry=str(self.registry), llm_model_id=self.model['model_id'],
             llm_base_url='http://127.0.0.1:1/v1')
-        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}]
+        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}, {'candidate': {'family': 'logistic', 'C': 3.}, 'status': 'success', 'score': .6}]
         payload = {'model': self.model['model_id'],
                    'usage': {'prompt_tokens': 100, 'completion_tokens': 10, 'total_tokens': 110},
                    'choices': [{'message': {'content': 'invalid JSON'}}]}
@@ -209,6 +210,51 @@ class FormalRequirements(unittest.TestCase):
             self.assertEqual(len(repairs), 1)
             self.assertNotIn('previous_experiments', repairs[0])
 
+    def test_stage_namespaces_do_not_mix_development_and_final_costs(self):
+        from dataclasses import replace
+        dev = self.root / 'dev_scope'
+        final = self.root / 'final_scope'
+        dev.mkdir()
+        final.mkdir()
+        config = TaskConfig(train_csv='unused', target_column='label')
+        with patch.dict(os.environ, {'SUPERAGENT_USAGE_ROOT': str(self.root/'scopes')}):
+            a = AutonomousPlanner(config, dev, 'same-task')
+            b = AutonomousPlanner(replace(config, evaluation_stage='released'), final, 'same-task')
+            self.assertNotEqual(a.ledger.path, b.ledger.path)
+            call = a.ledger.reserve(self.model, 128, 'planner', 'run', 'fixture')
+            a.ledger.finish(call['call_id'], self.model, usage={'prompt_tokens':100,'completion_tokens':50})
+            self.assertEqual(b.export_usage()['course_budget_cost_rmb'], '0')
+            self.assertEqual(a.export_usage()['course_budget_cost_rmb'], '0')
+            self.assertEqual(a.export_usage()['actual_recorded_cost_rmb'], '0.0002')
+
+    def test_http_failure_with_tokens_is_charged_and_without_tokens_is_exempt(self):
+        import io, time
+        from urllib.error import HTTPError
+        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5},
+                   {'candidate': {'family': 'logistic', 'C': 3.}, 'status': 'success', 'score': .6}]
+        for returned_usage in (None, {'prompt_tokens':100,'completion_tokens':50}):
+            output = self.root / ('http_unknown' if returned_usage is None else 'http_known')
+            output.mkdir()
+            config = TaskConfig(train_csv='unused',target_column='label',llm_mode='required',
+                llm_max_output_tokens=512,llm_registry=str(self.registry),llm_model_id=self.model['model_id'],
+                llm_base_url='http://127.0.0.1:1/v1')
+            body = {'error':'synthetic failure'}
+            if returned_usage is not None:
+                body['usage'] = returned_usage
+            with patch.dict(os.environ,{'SUPERAGENT_USAGE_ROOT':str(output/'shared')}):
+                planner=AutonomousPlanner(config,output,'http-fixture')
+                with patch('superagent.planning.llm.build_opener') as mocked:
+                    mocked.return_value.open.side_effect=HTTPError('http://localhost',500,'fixture',
+                        {'x-request-id':'synthetic-provider-id'},io.BytesIO(json.dumps(body).encode()))
+                    planner.choose(self.profile(),history,'accuracy',time.monotonic()+30)
+                    self.assertEqual(mocked.return_value.open.call_count,1)
+                summary=planner.export_usage()
+                self.assertTrue(summary['accounting_complete'])
+                self.assertEqual(summary['actual_recorded_cost_rmb'],'0' if returned_usage is None else '0.0002')
+                record=planner.ledger.audit_records()['calls'][0]
+                self.assertEqual(record['http_status'],500)
+                self.assertEqual(record['provider_request_id'],'synthetic-provider-id')
+
     def test_ambiguous_timeout_is_not_retried(self):
         import time
         output = self.root / 'timeout'
@@ -216,15 +262,15 @@ class FormalRequirements(unittest.TestCase):
         config = TaskConfig(train_csv='unused', target_column='label', llm_mode='required',
             llm_max_output_tokens=512, llm_registry=str(self.registry), llm_model_id=self.model['model_id'],
             llm_base_url='http://127.0.0.1:1/v1')
-        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}]
+        history = [{'candidate': {'family': 'dummy'}, 'status': 'success', 'score': .5}, {'candidate': {'family': 'logistic', 'C': 3.}, 'status': 'success', 'score': .6}]
         with patch.dict(os.environ, {'SUPERAGENT_USAGE_ROOT': str(self.root/'timeout_ledger')}):
             planner = AutonomousPlanner(config, output, 'timeout-fixture')
             with patch('superagent.planning.llm.build_opener') as mocked:
                 mocked.return_value.open.side_effect = TimeoutError('Unknown server usage')
-                with self.assertRaises(TimeoutError):
-                    planner.choose(self.profile(), history, 'accuracy', time.monotonic()+30)
+                planner.choose(self.profile(), history, 'accuracy', time.monotonic()+30)
                 self.assertEqual(mocked.return_value.open.call_count, 1)
-            self.assertFalse(planner.export_usage()['accounting_complete'])
+            self.assertTrue(planner.export_usage()['accounting_complete'])
+            self.assertFalse(planner.export_usage()['token_usage_complete'])
 
 
 if __name__ == "__main__":

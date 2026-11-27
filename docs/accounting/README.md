@@ -1,5 +1,7 @@
 # Accounting Records
 
+Current runtime rules follow [the instructor clarification](policy.md). Existing ledger files and historical inventory snapshots remain unchanged. Historical development totals are not the final evaluation budget. The inspection command no longer supports upper-bound write-back.
+
 This directory explains the complete set of ledger files currently present in this workspace. It does not modify, replace or independently reconstruct a ledger.
 
 ## Read in this order

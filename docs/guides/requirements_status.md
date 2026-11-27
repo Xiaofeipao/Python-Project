@@ -34,7 +34,7 @@ stop an operator from manually conducting prohibited post-hoc comparisons.
 The registry restricts language-model families and declared release/pricing
 metadata. Actual token usage, reservations and per-task costs are accounted for
 without inventing missing usage. Formal runs require a persistent shared ledger.
-Unknown-usage timeouts are not replayed. The short format-repair request has a
+Unknown-usage timeouts are not replayed; documented failed requests without usage are excluded from the final course budget. The short format-repair request has a
 single allowance and consumes a separate reservation. Local fallback is logged.
 
 All runtime calls belong to the one planner. The ledger supports historical
@@ -78,3 +78,7 @@ verify code organization. Synthetic ledger fixtures use temporary test folders,
 not the official .model_usage directory. New models and scores must not overwrite
 the retained development artifacts. No code cleanup can guarantee unchanged
 accuracy after a new stochastic search.
+
+## Accounting clarification supplied on 26 November 2026
+
+The newer course clarification supersedes earlier conservative unknown-cost holds: failed requests without usage do not consume the final-task budget and need no upper-bound reconciliation. Development costs are excluded from the course cap. See ../accounting/policy.md. All historical source records remain unchanged.

@@ -48,7 +48,9 @@ def allocate_candidates(candidates, profile, history):
     if remaining is None:
         return candidates
     rows = profile.get('rows', 0)
-    costly = {'minilm_logistic', 'torch_pretrained', 'frozen_image_logistic', 'torch_ensemble', 'image_meta_blend', 'rbf_svm'}
+    costly = {'minilm_logistic', 'torch_pretrained', 'frozen_image_logistic', 'torch_ensemble',
+              'image_meta_blend', 'rbf_svm', 'embedding_logistic', 'embedding_mlp',
+              'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost', 'transformer_finetune'}
     eligible = [c for c in candidates if not (c['family'] in costly and remaining < 60)
                 and not (c['family'] == 'rbf_svm' and rows > 20000)]
     # Preserve established general baselines before optional feature/encoder sweeps.
@@ -58,7 +60,13 @@ def allocate_candidates(candidates, profile, history):
                   or family in {'logistic', 'pairwise_overlap'} and profile['data_type'] == 'text'
                   and (c.get('analyzer') == 'char_wb' or family == 'pairwise_overlap')
                   and not c.get('pairwise_word_features'))
-        return (0 if anchor else 1 if family == 'frozen_image_logistic'
+        # Once the cheap baseline exists, expose the new text families before
+        # spending the remaining trials only on close variants of the same
+        # sparse linear model.
+        novel = {'text_fasttext', 'text_cnn', 'text_rnn', 'text_xgboost',
+                 'embedding_logistic', 'embedding_mlp'}
+        novel_ready = len(history) >= 2 and family in novel
+        return (0 if anchor or novel_ready else 1 if family == 'frozen_image_logistic'
                 else 2 if family in costly or c.get('feature_filter') else 1)
     eligible.sort(key=priority)
     limit = min(remaining, profile.get('trial_timeout_seconds', remaining))
@@ -219,6 +227,63 @@ def next_candidate(profile, history, metric):
         # Pairwise tasks get the signed overlap anchor before single-text
         # logistic variants; this remains modality/shape-based, not task-specific.
         initial[0:0] = [overlap, pairwise, dict(pairwise,pairwise_word_features=True)]
+    if profile['data_type'] == 'text' and profile.get('torch_available'):
+        # Trainable text stacks are independent of the TF-IDF vocabulary.  Keep
+        # them after the established sparse anchors so a large candidate list
+        # cannot displace the verified sparse anchors.
+        text_neural = [
+            {'family': 'text_fasttext', 'embedding_dim': 128, 'hidden': 192,
+             'epochs': 25, 'learning_rate': .002, 'weight_decay': .01,
+             'batch_size': profile.get('neural_batch_size', 64), 'ngram_max': 2,
+             'dropout': .2, 'max_vocab': 30000},
+        ]
+        if large_gpu:
+            text_neural += [
+                {'family': 'text_cnn', 'embedding_dim': 128, 'hidden': 128,
+                 'epochs': 24, 'learning_rate': .0015, 'weight_decay': .01,
+                 'batch_size': profile.get('neural_batch_size', 64), 'max_length': 256,
+                 'dropout': .2},
+                {'family': 'text_rnn', 'embedding_dim': 128, 'hidden': 128,
+                 'epochs': 24, 'learning_rate': .0015, 'weight_decay': .01,
+                 'batch_size': profile.get('neural_batch_size', 64), 'max_length': 256,
+                 'dropout': .2},
+            ]
+        initial.extend(text_neural)
+        if large_gpu and importlib.util.find_spec('xgboost') is not None:
+            # Sparse or compressed text features with a boosted-tree head.
+            initial.extend([
+                {'family': 'text_xgboost', 'iterations': 1000, 'depth': 3,
+                 'learning_rate': .03, 'reg_lambda': 10, 'analyzer': 'combined',
+                 'representation': 'separate'},
+                {'family': 'text_xgboost', 'iterations': 1600, 'depth': 4,
+                 'learning_rate': .025, 'reg_lambda': 20, 'analyzer': 'combined',
+                 'representation': 'separate', 'svd_components': 256},
+            ])
+    if profile['data_type'] == 'text' and profile.get('text_encoder_available'):
+        # Frozen transformer probes: MPNet, BGE, E5 and GTE, plus ModernBERT.
+        # Each candidate fixes an encoder/revision through the registry in
+        # models.text_encoder; no task-specific branch is introduced here.
+        initial.extend([
+            {'family': 'embedding_logistic', 'encoder': encoder, 'C': C,
+             'batch_size': profile.get('neural_batch_size', 64), 'max_length': 256}
+            for encoder in ('mpnet', 'bge', 'e5', 'gte')
+            for C in (1., .1)
+        ])
+        initial.append({'family': 'embedding_logistic', 'encoder': 'modernbert',
+                        'C': 1., 'batch_size': 32, 'max_length': 256})
+        if large_gpu:
+            initial.extend([
+                {'family': 'embedding_mlp', 'encoder': encoder, 'hidden': 256,
+                 'epochs': 30, 'learning_rate': .001, 'weight_decay': .01,
+                 'dropout': .2, 'batch_size': 64, 'max_length': 256}
+                for encoder in ('mpnet', 'bge')
+            ])
+            initial.extend([
+                {'family': 'transformer_finetune', 'encoder': encoder, 'epochs': 3,
+                 'learning_rate': 2e-5, 'weight_decay': .01, 'batch_size': 16,
+                 'max_length': 256, 'freeze_layers': 1}
+                for encoder in ('minilm-l12', 'mpnet')
+            ])
     if profile['data_type'] == 'text' and profile.get('tabular_columns'):
         hybrid = [{'family': 'hybrid_logistic', 'C': 1., 'analyzer': 'combined'},
                   {'family': 'hybrid_logistic', 'C': .1, 'analyzer': 'word'}]
@@ -308,6 +373,24 @@ def next_candidate(profile, history, metric):
                 variants.insert(0, dict(candidate, balanced=True))
         elif family in {'catboost_ensemble', 'tabular_blend', 'minilm_logistic'}:
             variants = []
+        elif family == 'embedding_logistic':
+            variants = [dict(candidate, C=value) for value in (.03, .3, 3.)]
+            variants += [dict(candidate, class_weight='balanced')]
+        elif family == 'embedding_mlp':
+            variants = [dict(candidate, hidden=value) for value in (128, 384)]
+            variants += [dict(candidate, learning_rate=value) for value in (.0003, .003)]
+            variants += [dict(candidate, epochs=candidate['epochs'] + 15)]
+        elif family in {'text_fasttext', 'text_cnn', 'text_rnn'}:
+            variants = [dict(candidate, learning_rate=value) for value in (.0005, .003)]
+            variants += [dict(candidate, epochs=candidate['epochs'] + 12)]
+            variants += [dict(candidate, dropout=value) for value in (.1, .35)]
+        elif family == 'text_xgboost':
+            variants = [dict(candidate, depth=value) for value in (5, 7)]
+            variants += [dict(candidate, iterations=value) for value in (600, 1800)]
+            variants += [dict(candidate, reg_lambda=value) for value in (1., 40.)]
+        elif family == 'transformer_finetune':
+            variants = [dict(candidate, learning_rate=value) for value in (1e-5, 5e-5)]
+            variants += [dict(candidate, epochs=candidate['epochs'] + 2)]
         elif family == 'xgboost':
             variants = [dict(candidate, reg_lambda=value) for value in (1, 20, 50)]
             if imbalanced:
@@ -449,6 +532,89 @@ def _build_model(profile, candidate, config):
         weight = candidate.get('image_weight', .7)
         return Pipeline([('preprocess', 'passthrough'),
                          ('classifier', ProbabilityBlend(members, weights=[weight, 1 - weight]))])
+    if family == 'embedding_logistic':
+        from superagent.models.text_encoder import TextEncoderFeatures
+        from sklearn.preprocessing import StandardScaler
+        if profile['data_type'] != 'text':
+            raise ValueError('Frozen transformer probes require text input')
+        columns = profile['text_columns']
+        return Pipeline([('preprocess', TextEncoderFeatures(
+                             columns, text=True, encoder=candidate.get('encoder', 'mpnet'),
+                             device=config.device, batch_size=candidate.get('batch_size', 64),
+                             max_length=candidate.get('max_length', 256))),
+                         ('scale', StandardScaler()),
+                         ('classifier', LogisticRegression(C=candidate.get('C', 1.),
+                                                           class_weight=candidate.get('class_weight'),
+                                                           max_iter=2500, random_state=config.seed))])
+    if family == 'embedding_mlp':
+        from superagent.models.text_encoder import TextEncoderFeatures
+        from superagent.models.neural import TorchClassifier
+        from sklearn.preprocessing import StandardScaler
+        if profile['data_type'] != 'text':
+            raise ValueError('Frozen transformer probes require text input')
+        return Pipeline([('preprocess', TextEncoderFeatures(
+                             profile['text_columns'], text=True,
+                             encoder=candidate.get('encoder', 'mpnet'), device=config.device,
+                             batch_size=candidate.get('batch_size', 64),
+                             max_length=candidate.get('max_length', 256))),
+                         ('scale', StandardScaler()),
+                         ('classifier', TorchClassifier(
+                             architecture='mlp', hidden=candidate.get('hidden', 256),
+                             epochs=candidate.get('epochs', 30),
+                             learning_rate=candidate.get('learning_rate', .001),
+                             weight_decay=candidate.get('weight_decay', .01),
+                             batch_size=config.neural_batch_size,
+                             dropout=candidate.get('dropout', .2), device=config.device,
+                             threads=config.threads, random_state=config.seed,
+                             mixed_precision=config.mixed_precision,
+                             gpu_cache_fraction=config.gpu_cache_fraction))])
+    if family == 'transformer_finetune':
+        from superagent.models.text_finetune import TransformerFinetuneClassifier
+        if profile['data_type'] != 'text':
+            raise ValueError('Transformer fine-tuning requires text input')
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', TransformerFinetuneClassifier(
+                             profile['text_columns'], encoder=candidate.get('encoder', 'mpnet'),
+                             epochs=candidate.get('epochs', 3),
+                             learning_rate=candidate.get('learning_rate', 2e-5),
+                             weight_decay=candidate.get('weight_decay', .01),
+                             batch_size=candidate.get('batch_size', 16),
+                             max_length=candidate.get('max_length', 256),
+                             freeze_layers=candidate.get('freeze_layers', 0),
+                             device=config.device, threads=config.threads,
+                             random_state=config.seed))])
+    if family == 'text_xgboost':
+        from superagent.models.tabular import EncodedXGBoost
+        if profile['data_type'] != 'text':
+            raise ValueError('Text XGBoost requires text input')
+        return Pipeline([('preprocess', preprocessor(profile, candidate, config.image_root)),
+                         ('classifier', EncodedXGBoost(
+                             iterations=candidate.get('iterations', 1000),
+                             depth=candidate.get('depth', 4),
+                             learning_rate=candidate.get('learning_rate', .03),
+                             reg_lambda=candidate.get('reg_lambda', 10),
+                             threads=config.threads, balanced=candidate.get('balanced', False),
+                             device=config.device, random_state=config.seed))])
+    if family in {'text_fasttext', 'text_cnn', 'text_rnn'}:
+        from superagent.models.text_neural import TextNeuralClassifier
+        if profile['data_type'] != 'text':
+            raise ValueError('Trainable text networks require text input')
+        architecture = {'text_fasttext': 'fasttext', 'text_cnn': 'textcnn',
+                        'text_rnn': 'textrnn'}[family]
+        return Pipeline([('preprocess', 'passthrough'),
+                         ('classifier', TextNeuralClassifier(
+                             profile['text_columns'], architecture=architecture,
+                             embedding_dim=candidate.get('embedding_dim', 128),
+                             hidden=candidate.get('hidden', 128),
+                             epochs=candidate.get('epochs', 25),
+                             learning_rate=candidate.get('learning_rate', .001),
+                             weight_decay=candidate.get('weight_decay', .01),
+                             batch_size=candidate.get('batch_size', config.neural_batch_size),
+                             max_length=candidate.get('max_length', 256),
+                             ngram_max=candidate.get('ngram_max', 2),
+                             dropout=candidate.get('dropout', .2), device=config.device,
+                             threads=config.threads, random_state=config.seed,
+                             max_vocab=candidate.get('max_vocab', 30000)))])
     if family == 'minilm_logistic':
         from superagent.models.text_encoder import MiniLMFeatures
         from sklearn.preprocessing import StandardScaler

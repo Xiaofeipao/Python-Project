@@ -204,6 +204,11 @@ def _train_agent(config, output, resume_from=None):
         # requiring a task-specific config flag. Explicit enable_minilm stays
         # valid for development experiments; tabular tasks do not pay this cost.
         profile['minilm_available'] = _minilm_available(config, profile, env)
+        # The broader frozen-encoder registry shares the same optional
+        # infrastructure.  Keep it behind an explicit package check so a
+        # minimal deployment does not advertise unavailable backbones.
+        profile['text_encoder_available'] = bool(
+            profile['minilm_available'] and env.get('packages', {}).get('transformers'))
         profile['feature_search_enabled'] = config.enable_feature_search
         cuda_enabled = profile["torch_available"] and env["torch"].get("cuda_available") and config.device != "cpu"
         if config.compute_profile == "gpu_large" and not cuda_enabled:

@@ -6,3 +6,5 @@ torchvision>=0.20,<1
 
 xgboost>=3.0,<4
 sentence-transformers>=5.7,<6
+transformers>=4.48,<5
+huggingface-hub>=0.24,<2

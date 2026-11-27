@@ -6,10 +6,11 @@ import os
 import socket
 import time
 import uuid
+from http.client import HTTPException
 from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
-from urllib.error import URLError
+from urllib.error import URLError, HTTPError
 
 from superagent.common.json_io import append_json, event, write_json
 from superagent.planning.search_space import candidate_key, next_candidate
@@ -119,8 +120,9 @@ class AutonomousPlanner:
         if config.evaluation_stage != "development" and (not shared_root or not Path(shared_root).is_absolute()):
             raise ValueError("Formal runs require one persistent absolute SUPERAGENT_USAGE_ROOT shared across agents and frozen copies")
         root = Path(shared_root or str(ROOT / ".model_usage"))
-        key = hashlib.sha256(evaluation_id.encode("utf-8")).hexdigest()
-        self.ledger = UsageLedger(root / key, evaluation_id, config.llm_budget_rmb)
+        scope = 'development' if config.evaluation_stage == 'development' else 'final_evaluation'
+        key = hashlib.sha256((scope + ':' + evaluation_id).encode("utf-8")).hexdigest()
+        self.ledger = UsageLedger(root / key, evaluation_id, config.llm_budget_rmb, config.evaluation_stage)
         self.catalog = None
         self.model = None
         initial = self.export_usage()
@@ -155,6 +157,10 @@ class AutonomousPlanner:
             return next_candidate(profile, history, metric)
         menu = candidate_menu(profile, history, metric)
         fallback, reason = (menu[0]['candidate'], menu[0]['reason']) if menu else (None, 'Eligible search space exhausted')
+        if getattr(self,'_resume_skip_api_once',False):
+            self._resume_skip_api_once=False
+            event(self.output,'llm_skipped',reason='First restored decision uses local planning; never replay an interrupted API request')
+            return fallback,reason
         # Establish the generic anchor before spending API budget on exploration.
         # This is modality/shape-level only and contains no task or dataset identity.
         if len(history) == 1:
@@ -173,10 +179,6 @@ class AutonomousPlanner:
                    'restored_reflections':getattr(self,'_restored_reflections',[]),
                    'repair_used': getattr(self, '_repair_used', False),
                    'consecutive_invalid_plans': getattr(self, '_invalid_plans', 0)})
-        if getattr(self,'_resume_skip_api_once',False):
-            self._resume_skip_api_once=False
-            event(self.output,'llm_skipped',reason='First restored decision uses local planning; never replay an interrupted API request')
-            return fallback,reason
         repair = getattr(self, '_invalid_plans', 0) >= 2
         if repair and getattr(self, '_repair_used', False):
             event(self.output, 'llm_skipped', reason='Controlled repair exhausted; use local planning')
@@ -185,7 +187,8 @@ class AutonomousPlanner:
             return fallback, reason
         reserve = worst_case_cost(self.model, self.config.llm_max_output_tokens)
         account = self.ledger.summary()
-        if amount(account['actual_recorded_cost_rmb']) + amount(account['unreconciled_reserved_rmb']) + reserve > amount(self.config.max_cost_rmb):
+        if (self.config.evaluation_stage != 'development' and
+            amount(account['course_budget_cost_rmb']) + amount(account['unreconciled_reserved_rmb']) + reserve > amount(self.config.max_cost_rmb)):
             event(self.output, 'llm_skipped', reason='Worst-case total with prior unknown reservations exceeds cost ceiling; use local planner')
             return fallback, reason
         menu = candidate_menu(profile, history, metric)
@@ -304,10 +307,30 @@ class AutonomousPlanner:
         except BaseException as exc:
             if not recorded:
                 dns_not_sent = isinstance(exc, URLError) and isinstance(exc.reason, socket.gaierror)
+                error_usage = None
+                if isinstance(exc, HTTPError):
+                    try:
+                        error_payload = exc.read(8 * 1024 * 1024 + 1)
+                        (folder / f"{call['call_id']}.response.json").write_bytes(error_payload)
+                        error_body = json.loads(error_payload)
+                        candidate_usage = error_body.get('usage') if isinstance(error_body, dict) else None
+                        if isinstance(candidate_usage, dict) and all(k in candidate_usage for k in ('prompt_tokens', 'completion_tokens')):
+                            error_usage = candidate_usage
+                    except (ValueError, OSError, HTTPException):
+                        pass
                 record = self.ledger.finish(call["call_id"], self.model,
+                                            usage=error_usage,
                                             error='DNSResolutionError' if dns_not_sent else type(exc).__name__,
-                                            dns_not_sent=dns_not_sent)
+                                            dns_not_sent=dns_not_sent,
+                                            failed_without_usage=isinstance(exc, (TimeoutError, URLError, ConnectionError)),
+                                            http_status=getattr(exc, 'code', None),
+                                            provider_request_id=getattr(exc, 'headers', {}).get('x-request-id') if getattr(exc, 'headers', None) else None)
                 append_json(self.output / "model_calls.jsonl", record)
+                if (record.get('budget_excluded_reason') == 'failed_request_without_usage'
+                        or isinstance(exc, (TimeoutError, URLError, ConnectionError)) and record['status'] == 'recorded'):
+                    event(self.output, 'llm_unavailable', call_id=call['call_id'], error=type(exc).__name__,
+                          http_status=getattr(exc, 'code', None), action='Use local fallback; known usage charged, qualifying unknown usage excluded')
+                    return fallback, reason
             if self.config.allow_provisional_accounting and isinstance(exc, (TimeoutError, URLError)):
                 event(self.output, 'llm_unavailable', error=type(exc).__name__, action='No retry; use deterministic fallback; retain reservation')
                 return fallback, reason

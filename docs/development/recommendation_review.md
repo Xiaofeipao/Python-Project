@@ -34,7 +34,7 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 
 ## Accounting and recovery: original section six
 
-19. **API exponential-backoff retries: not implemented.** Unknown usage retains its reservation and is never silently replayed. The first restored decision is local. Bounded training-process restarts are not HTTP-request retries.
+19. **API exponential-backoff retries: not implemented.** Failed requests without usage retain unknown tokens, are excluded from the course cap and are never silently replayed. Pending or successful-but-unaccounted requests remain guarded. The first restored decision is local. Bounded training-process restarts are not HTTP-request retries.
 20. **Version binding: strengthened.** Environment records include Python, main libraries and installed distributions. Trials reference source/environment evidence. Recovery verifies code, policy, data, dependencies and the original ledger.
 21. **Recovery: implemented.** runtime/checkpoint.py and scripts/workflows/train_resilient.py restore to new audit directories, rebuild trial/family memory, retain structured reflections and parent evidence, and count downtime. Only unfinished same-version runs can resume. Controlled process termination verified automatic completion and unchanged ledger paths.
 
@@ -42,7 +42,7 @@ Every suggestion was reviewed. Reviewed does not mean fully implemented or prove
 
 22. **Patience: optional implementation.** After at least eight trials, a configured interval without validation-mean improvement can stop search. The real Headlines stability run stopped at trial nine. This is a heuristic, not proof of an optimum.
 23. **Family retirement/exhaustion: implemented.** Failed families leave the current menu and exhausted eligible search ends. Algorithms are not permanently banned across unrelated tasks.
-24. **Cost/time gates: implemented.** Historical unknown holds and the next worst-case request count against the task budget. Final refitting receives reserved time; restarting never resets the unseen window. Unreconciled runs remain development artifacts.
+24. **Cost/time gates: implemented.** Known final-evaluation costs and pending request reservations count against the task budget; qualifying failed unknowns and development calls do not. Final refitting receives reserved time; restarting never resets the unseen window. Unreconciled runs remain development artifacts.
 
 ## Current evidence and limits
 

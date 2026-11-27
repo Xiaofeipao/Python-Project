@@ -34,9 +34,11 @@ A development check on 2026-11-23 accepted one live Flash plan using the integra
 
 Registered user-selected off-peak prices per million tokens: Flash CNY 1 input / 4 output (effective 2026-09-10); Pro CNY 4.5 input / 13.5 output (effective 2026-08-17). Every input token uses the cache-miss rate; cache discounts and free credits are excluded. Historical publisher evidence and hashes are preserved; these calculations are distinct from platform invoices. Exact school deployment revisions remain unverified. Earlier standard/peak ledgers are retained as historical audit records and must not be reported as the final off-peak run.
 
-Task-wide ledgers retain calls across attempts. Known costs, unresolved worst-case reservations and the next reservation must fit the CNY 20 ceiling. Actual costs use returned tokens, including reasoning tokens counted by the provider. Missing usage is not assumed zero; reservations are not charges.
+The course clarification supplied on 26 November 2026 applies the RMB 20 cap only to final evaluation. Development calls remain auditable but do not consume that course budget. See ../accounting/policy.md for the complete rule.
 
---provisional-accounting is development-only. It preserves historical unknowns and marks accounting_provisional=true and eligible_for_formal_submission=false. Formal released/unseen runs require reconciled accounting and one persistent absolute SUPERAGENT_USAGE_ROOT. Do not create a new ledger to evade historical usage.
+Failed or timed-out requests without returned token usage retain unknown tokens and unknown actual cost. They are explicitly excluded from the course budget, release their pending reservation and do not by themselves block continued search or final output. No failure charge is estimated. A failure that returns valid token counts is charged normally. Successful responses with missing or inconsistent usage are not automatically exempt. Pending requests remain guarded against duplicate/concurrent calls.
+
+--provisional-accounting remains a legacy development-only option; ordinary failed-request exemptions no longer require it. New ledgers are separated by development/final_evaluation scope and evaluation ID. Resumes share the original scoped ledger. Historical records are not migrated or rewritten. Do not change IDs to reset a final evaluation budget.
 
 Complete accounting alone never certifies formal eligibility. Current summaries
 also distinguish formal_runtime_checks_passed from submission_review_required.
